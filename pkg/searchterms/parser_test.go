@@ -1,7 +1,7 @@
 package searchterms
 
 import (
-	"github.com/warmans/rsk-search/pkg/filter"
+	"github.com/warmans/tvgif/pkg/filter"
 	"reflect"
 	"testing"
 )
