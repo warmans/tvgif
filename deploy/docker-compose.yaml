@@ -9,5 +9,5 @@ services:
     environment:
       DISCORD_TOKEN: changeme
       MEDIA_PATH: /media
-      CACHE_DIR: /cache
+      CACHE_PATH: /cache
     restart: unless-stopped

@@ -6,6 +6,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/discord"
+	"github.com/warmans/tvgif/pkg/flag"
+	"github.com/warmans/tvgif/pkg/importer"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/search"
 	"log"
@@ -16,15 +18,35 @@ import (
 
 func NewBotCommand(logger *slog.Logger) *cobra.Command {
 
-	var indexPath string
 	var mediaPath string
 	var cachePath string
 	var discordToken string
+
+	var populateIndexOnStart bool
+	var indexPath string
+	var metadataPath string
 
 	cmd := &cobra.Command{
 		Use:   "bot",
 		Short: "start the discord bot",
 		RunE: func(cmd *cobra.Command, args []string) error {
+
+			if indexPath == "" {
+				return fmt.Errorf("no INDEX_PATH specified")
+			}
+			if populateIndexOnStart {
+				if metadataPath == "" {
+					return fmt.Errorf("no METADATA_PATH specified")
+				}
+				logger.Info("Creating Metadata...", slog.String("path", metadataPath))
+				if err := importer.CreateMetadataFromSRTs(mediaPath, metadataPath); err != nil {
+					return err
+				}
+				logger.Info("Creating Index...", slog.String("path", indexPath))
+				if err := importer.PopulateIndex(logger, metadataPath, indexPath); err != nil {
+					return err
+				}
+			}
 
 			reader, err := bluge.OpenReader(bluge.DefaultConfig(indexPath))
 			if err != nil {
@@ -74,10 +96,14 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&indexPath, "o", "./var/index/metadata.bluge", "path to index files")
-	cmd.Flags().StringVar(&mediaPath, "i", os.Getenv("MEDIA_PATH"), "path to media files (i.e. video)")
-	cmd.Flags().StringVar(&discordToken, "t", os.Getenv("DISCORD_TOKEN"), "discord auth token")
-	cmd.Flags().StringVar(&cachePath, "c", os.Getenv("CACHE_DIR"), "cache dir")
+	flag.StringVarEnv(cmd.Flags(), &mediaPath, "", "media-path", "./var/media", "path to media files")
+	flag.StringVarEnv(cmd.Flags(), &discordToken, "", "discord-token", "", "discord auth token")
+	flag.StringVarEnv(cmd.Flags(), &cachePath, "", "cache-path", "", "path to cache dir")
+
+	flag.BoolVarEnv(cmd.Flags(), &populateIndexOnStart, "", "populate-index", true, "automatically create indexes and metadata from the media dir")
+	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")
+	flag.StringVarEnv(cmd.Flags(), &metadataPath, "", "metadata-path", "./var/metadata", "path to metadata files")
+	flag.Parse()
 
 	return cmd
 }

@@ -12,10 +12,6 @@ build:
 refresh: build
 	./bin/tvgif importer refresh-index
 
-.PHONY: run.discord-bot
-run.discord-bot:
-	DEBUG=true ./bin/tvgif bot
-
 .PHONY: lint
 lint:
 	./.env/golangci-lint run
