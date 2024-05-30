@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
+	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/search/model"
@@ -55,7 +56,20 @@ func NewBot(
 	searcher search.Searcher,
 	mediaCache *mediacache.Cache,
 	mediaPath string,
-) *Bot {
+) (*Bot, error) {
+
+	publications, err := searcher.ListTerms(context.Background(), "publication")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch publications: %w", err)
+	}
+	publicationChoices := []*discordgo.ApplicationCommandOptionChoice{}
+	for _, v := range publications {
+		publicationChoices = append(publicationChoices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  v,
+			Value: v,
+		})
+	}
+
 	bot := &Bot{
 		logger:     logger,
 		session:    session,
@@ -75,6 +89,19 @@ func NewBot(
 						Required:     true,
 						Autocomplete: true,
 					},
+					{
+						Type:              discordgo.ApplicationCommandOptionString,
+						Name:              "publication",
+						NameLocalizations: nil,
+						Description:       "limit by publication",
+						Required:          false,
+						Autocomplete:      false,
+						Choices:           publicationChoices,
+						MinValue:          nil,
+						MaxValue:          0,
+						MinLength:         nil,
+						MaxLength:         0,
+					},
 				},
 			},
 		},
@@ -90,7 +117,7 @@ func NewBot(
 		"tvgif_confirm": bot.queryCompleteCustom,
 	}
 
-	return bot
+	return bot, nil
 }
 
 type Bot struct {
@@ -169,8 +196,10 @@ func (b *Bot) Close() error {
 }
 
 func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
+
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
+
 		selection := i.ApplicationCommandData().Options[0].StringValue()
 		if selection == "" {
 			return
@@ -195,6 +224,11 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 		rawTerms := strings.TrimSpace(data.Options[0].StringValue())
 
+		publication := ""
+		if len(data.Options) > 1 {
+			publication = strings.TrimSpace(data.Options[1].StringValue())
+		}
+
 		terms, err := searchterms.Parse(rawTerms)
 		if err != nil {
 			return
@@ -210,9 +244,14 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			}
 			return
 		}
+
+		f := searchterms.TermsToFilter(terms)
+		if publication != "" {
+			f = filter.And(filter.Eq("publication", filter.String(publication)), f)
+		}
 		res, err := b.searcher.Search(
 			context.Background(),
-			searchterms.TermsToFilter(terms),
+			f,
 			0,
 		)
 		if err != nil {
@@ -220,7 +259,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		choices := []*discordgo.ApplicationCommandOptionChoice{}
+		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
 			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
 				Name:  util.TrimToN(v.Content, 100),

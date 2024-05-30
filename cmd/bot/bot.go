@@ -45,8 +45,11 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create media cache: %w", err)
 			}
 
-			bot := discord.NewBot(logger, session, search.NewBlugeSearch(reader), mediaCache, mediaPath)
 			logger.Info("Starting bot...")
+			bot, err := discord.NewBot(logger, session, search.NewBlugeSearch(reader), mediaCache, mediaPath)
+			if err != nil {
+				return fmt.Errorf("failed to create bot: %w", err)
+			}
 			if err = bot.Start(); err != nil {
 				return fmt.Errorf("failed to start bot: %w", err)
 			}

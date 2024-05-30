@@ -9,6 +9,7 @@ import (
 	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/filter/bluge_query"
 	"github.com/warmans/tvgif/pkg/search/model"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,7 @@ const (
 type Searcher interface {
 	Search(ctx context.Context, f filter.Filter, page int32) ([]model.DialogDocument, error)
 	Get(ctx context.Context, id string) (*model.DialogDocument, error)
+	ListTerms(ctx context.Context, field string) ([]string, error)
 }
 
 func NewBlugeSearch(index *bluge.Reader) *BlugeSearch {
@@ -84,6 +86,35 @@ func (b *BlugeSearch) Search(ctx context.Context, f filter.Filter, page int32) (
 		}
 	}
 	return results, err
+}
+
+func (b *BlugeSearch) ListTerms(ctx context.Context, fieldName string) ([]string, error) {
+
+	fieldDict, err := b.index.DictionaryIterator(fieldName, nil, []byte{}, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := fieldDict.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+
+	tfd, err := fieldDict.Next()
+	terms := []string{}
+	for err == nil && tfd != nil && strings.TrimSpace(tfd.Term()) != "" {
+		terms = append(terms, tfd.Term())
+		if len(terms) > 100 {
+			return nil, fmt.Errorf("too many terms for field '%s' returned", fieldName)
+		}
+		tfd, err = fieldDict.Next()
+	}
+
+	sort.Slice(terms, func(i, j int) bool {
+		return terms[i] > terms[j]
+	})
+
+	return terms, nil
 }
 
 // format is [publication]-S[series]E[episode]-[startTs]:[endTs]
