@@ -25,7 +25,6 @@ jobs:
         uses: golangci/golangci-lint-action@v4
         with:
           version: v1.56.2
-          working-directory: server
           skip-cache: true
           args: --timeout=5m
 
@@ -64,7 +63,7 @@ jobs:
       - name: Store binaries
         uses: actions/upload-artifact@v3
         with:
-          name: server-binaries
+          name: bot-binary
           path: ${{env.working-directory}}/bin
           retention-days: 1
 
@@ -80,11 +79,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Download server binaries
+      - name: Download bot binary
         uses: actions/download-artifact@v3
         with:
-          name: server-binaries
-          path: ${{env.working-directory}}/server/bin
+          name: bot-binary
+          path: ${{env.working-directory}}/bin
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -98,10 +97,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push server
+      - name: Build and push
         uses: docker/build-push-action@v4
         with:
           file: ${{env.working-directory}}/discord-bot/Dockerfile
-          context: ${{env.working-directory}}/server/bin
+          context: ${{env.working-directory}}/bin
           push: true
           tags: warmans/tvgif:latest
