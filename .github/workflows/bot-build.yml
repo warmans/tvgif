@@ -101,6 +101,6 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           file: ${{env.working-directory}}/Dockerfile
-          context: ${{env.working-directory}}/bin
+          context: ${{env.working-directory}}
           push: true
           tags: warmans/tvgif:latest

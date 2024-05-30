@@ -11,7 +11,7 @@ USER nobody
 
 WORKDIR /opt/tvgif
 
-COPY --chown=nobody tvgif .
+COPY --chown=nobody bin/tvgif .
 
 RUN chmod +x tvgif
 
