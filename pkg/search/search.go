@@ -65,12 +65,14 @@ func (b *BlugeSearch) Search(ctx context.Context, f filter.Filter, page int32) (
 	req.AddAggregation("actor_count_over_time", agg)
 
 	dmi, err := b.index.Search(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
 
 	match, err := dmi.Next()
 	if err != nil {
 		return nil, err
 	}
-
 	var results []model.DialogDocument
 	for match != nil {
 		res, err := scanDocument(match)

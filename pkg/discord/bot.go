@@ -665,12 +665,3 @@ func lineLength(line []string) int {
 	// total + number of spaces that would be in the line
 	return total + (len(line) - 1)
 }
-
-// ensure each line in the slice is free from linebreak
-func reSplitDialog(dialog []string) []string {
-	fixed := []string{}
-	for _, line := range dialog {
-		fixed = append(fixed, strings.Split(line, "\n")...)
-	}
-	return fixed
-}
