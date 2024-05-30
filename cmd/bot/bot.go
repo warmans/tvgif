@@ -40,9 +40,17 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create discord session: %w", err)
 			}
 
+			if cachePath == "" {
+				logger.Info("No cache dir specified, using OS temp dir")
+				cachePath = os.TempDir()
+			}
 			mediaCache, err := mediacache.NewCache(cachePath, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create media cache: %w", err)
+			}
+
+			if mediaPath == "" {
+				return fmt.Errorf("no media dir specified")
 			}
 
 			logger.Info("Starting bot...")
@@ -69,7 +77,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	cmd.Flags().StringVar(&indexPath, "o", "./var/index/metadata.bluge", "path to index files")
 	cmd.Flags().StringVar(&mediaPath, "i", os.Getenv("MEDIA_PATH"), "path to media files (i.e. video)")
 	cmd.Flags().StringVar(&discordToken, "t", os.Getenv("DISCORD_TOKEN"), "discord auth token")
-	cmd.Flags().StringVar(&cachePath, "c", os.TempDir(), "cache dir")
+	cmd.Flags().StringVar(&cachePath, "c", os.Getenv("CACHE_DIR"), "cache dir")
 
 	return cmd
 }

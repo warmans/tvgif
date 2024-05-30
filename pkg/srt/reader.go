@@ -37,7 +37,8 @@ func Read(source io.Reader) ([]model.Dialog, error) {
 			return nil, err
 		}
 
-		line := strings.TrimSpace(scanner.Text())
+		// strip random BOMs
+		line := strings.Replace(strings.TrimSpace(scanner.Text()), "\ufeff", "", -1)
 		if line == "" {
 			if currentDialog != (model.Dialog{}) {
 				dialog = append(dialog, currentDialog)

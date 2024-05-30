@@ -1,0 +1,13 @@
+version: "3.2"
+services:
+  server:
+    image: "warmans/tvgif:latest"
+    volumes:
+      # Remember to chown cache dir on host to nobody:nogroup so container can write to it
+      - ${PWD}/media:/media
+      - ${PWD}/cache:/cache
+    environment:
+      DISCORD_TOKEN: changeme
+      MEDIA_PATH: /media
+      CACHE_DIR: /cache
+    restart: unless-stopped
