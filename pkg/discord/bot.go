@@ -235,6 +235,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 		if len(terms) == 0 {
+			b.logger.Warn("No terms were given")
 			if err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 				Data: &discordgo.InteractionResponseData{
@@ -326,6 +327,7 @@ func (b *Bot) beginVideoResponse(
 			return
 		}
 
+		b.logger.Info("Completed rendering")
 		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: util.ToPtr("Complete!" + interactionResponse.Data.Content),
 			Components: util.ToPtr([]discordgo.MessageComponent{
@@ -656,7 +658,11 @@ func FormatGifText(maxLineLength int, lines []string) string {
 			text = append(text, strings.Join(currentLine, " "))
 		}
 	}
-	return strings.TrimSpace(strings.Replace(strings.Join(text, "\n"), "'", "’", -1))
+
+	finalText := strings.Join(text, "\n")
+	finalText = strings.Replace(finalText, "'", "’", -1)
+	finalText = strings.Replace(finalText, ":", `\:`, -1)
+	return strings.TrimSpace(finalText)
 }
 
 func lineLength(line []string) int {
