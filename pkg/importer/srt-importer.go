@@ -3,6 +3,7 @@ package importer
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/srt"
 	"os"
@@ -107,5 +108,5 @@ func parseSRT(filePath string) ([]model.Dialog, error) {
 		return nil, fmt.Errorf("failed to open srt file %s: %w", filePath, err)
 	}
 	defer f.Close()
-	return srt.Read(f)
+	return srt.Read(f, true, limits.MaxGifDuration)
 }

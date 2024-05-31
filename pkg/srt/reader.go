@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/model"
 	"io"
 	"regexp"
@@ -22,7 +23,7 @@ const (
 	srtEntryDialog = srtEntity("dialog")
 )
 
-func Read(source io.Reader) ([]model.Dialog, error) {
+func Read(source io.Reader, eliminateSpeechGaps bool, limitDialogDuration time.Duration) ([]model.Dialog, error) {
 
 	dialog := []model.Dialog{}
 	currentDialog := model.Dialog{}
@@ -56,9 +57,12 @@ func Read(source io.Reader) ([]model.Dialog, error) {
 			}
 			wantNext = srtEntryTs
 		case srtEntryTs:
-			if currentDialog.StartTimestamp, currentDialog.EndTimestamp, err = scanTimestamps(line); err != nil {
+			startTimesamp, endTimestamp, err := scanTimestamps(line)
+			if err != nil {
 				return nil, fmt.Errorf("failed to scan timestamps: %w", err)
 			}
+			currentDialog.StartTimestamp = startTimesamp
+			currentDialog.EndTimestamp = limitDuration(startTimesamp, endTimestamp, limitDialogDuration)
 			wantNext = srtEntryDialog
 		case srtEntryDialog:
 			line = htmlTag.ReplaceAllString(line, "")
@@ -74,7 +78,33 @@ func Read(source io.Reader) ([]model.Dialog, error) {
 		dialog = append(dialog, currentDialog)
 	}
 
+	// override the end time of a line of dialog with the following line's start time
+	if eliminateSpeechGaps {
+		dialog = eliminateGaps(dialog)
+	}
+
 	return dialog, nil
+}
+
+// make the end timestamp of dialog equal to the start of the next line, unless it exceeds the max duration
+func eliminateGaps(dialog []model.Dialog) []model.Dialog {
+	fixed := make([]model.Dialog, len(dialog))
+	for k, v := range dialog {
+		if k == len(dialog)-1 {
+			break
+		}
+		nextLine := dialog[k+1]
+		v.EndTimestamp = limitDuration(v.StartTimestamp, nextLine.StartTimestamp, limits.MaxGifDuration)
+		fixed[k] = v
+	}
+	return fixed
+}
+
+func limitDuration(startTimestamp, endTimestamp, maxDuration time.Duration) time.Duration {
+	if endTimestamp-startTimestamp > maxDuration {
+		return startTimestamp + maxDuration
+	}
+	return endTimestamp
 }
 
 func scanPos(line string) (int64, error) {

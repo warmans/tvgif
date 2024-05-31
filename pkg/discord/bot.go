@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"github.com/warmans/tvgif/pkg/filter"
+	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/search/model"
@@ -271,7 +271,6 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Value: v.ID,
 			})
 		}
-		spew.Dump(choices)
 		if err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 			Data: &discordgo.InteractionResponseData{
@@ -583,7 +582,7 @@ func (b *Bot) renderGif(dialog model.DialogDocument, username string, placeholde
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse start time: %w", err)
 	}
-	if endTimestamp-startTimestamp > time.Second*20 {
+	if endTimestamp-startTimestamp > limits.MaxGifDuration {
 		return nil, fmt.Errorf("gif cannot be more than 20 seconds")
 	}
 	b.logger.Debug(

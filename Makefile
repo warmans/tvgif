@@ -8,8 +8,12 @@ install.golangci:
 build:
 	go build -o ./bin/tvgif
 
+.PHONY: update-meta
+update-meta: build
+	./bin/tvgif importer srt $(MEDIA_PATH)
+
 .PHONY: refresh
-refresh: build
+refresh: update-meta
 	./bin/tvgif importer refresh-index
 
 .PHONY: lint
