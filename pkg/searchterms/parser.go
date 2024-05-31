@@ -1,14 +1,16 @@
 package searchterms
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/warmans/tvgif/pkg/filter"
+	"strconv"
 	"strings"
 )
 
 type Term struct {
 	Field string
-	Value string
+	Value Value
 	Op    filter.CompOp
 }
 
@@ -49,13 +51,15 @@ func (p *parser) Parse() ([]Term, error) {
 
 func (p *parser) parseOuter() ([]Term, error) {
 	terms := []Term{}
-	term, err := p.parseInner()
+	innerTerms, err := p.parseInner()
 	if err != nil {
 		return nil, err
 	}
-	for term != nil {
-		terms = append(terms, *term)
-		term, err = p.parseInner()
+	for innerTerms != nil {
+		for _, term := range innerTerms {
+			terms = append(terms, *term)
+		}
+		innerTerms, err = p.parseInner()
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +67,7 @@ func (p *parser) parseOuter() ([]Term, error) {
 	return terms, nil
 }
 
-func (p *parser) parseInner() (*Term, error) {
+func (p *parser) parseInner() ([]*Term, error) {
 	tok, err := p.getNext()
 	if err != nil {
 		return nil, err
@@ -72,11 +76,11 @@ func (p *parser) parseInner() (*Term, error) {
 	case tagEOF:
 		return nil, nil
 	case tagQuotedString:
-		return &Term{
+		return []*Term{{
 			Field: "content",
-			Value: strings.Trim(tok.lexeme, `"`),
+			Value: String(strings.Trim(tok.lexeme, `"`)),
 			Op:    filter.CompOpEq,
-		}, nil
+		}}, nil
 	case tagWord:
 		words := []string{tok.lexeme}
 		next, err := p.peekNext()
@@ -96,31 +100,37 @@ func (p *parser) parseInner() (*Term, error) {
 				return nil, err
 			}
 		}
-		return &Term{
+		return []*Term{{
 			Field: "content",
-			Value: strings.Join(words, " "),
+			Value: String(strings.Join(words, " ")),
 			Op:    filter.CompOpFuzzyLike,
-		}, nil
+		}}, nil
 	case tagMention:
 		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
 		if err != nil {
 			return nil, err
 		}
-		return &Term{
+		return []*Term{{
 			Field: "actor",
-			Value: strings.ToLower(mentionText.lexeme),
+			Value: String(strings.ToLower(mentionText.lexeme)),
 			Op:    filter.CompOpEq,
-		}, nil
+		}}, nil
 	case tagPublication:
 		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
 		if err != nil {
 			return nil, err
 		}
-		return &Term{
+		return []*Term{{
 			Field: "publication",
-			Value: strings.ToLower(mentionText.lexeme),
+			Value: String(strings.ToLower(mentionText.lexeme)),
 			Op:    filter.CompOpEq,
-		}, nil
+		}}, nil
+	case tagId:
+		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
+		if err != nil {
+			return nil, err
+		}
+		return p.expandIDCondition(strings.ToLower(mentionText.lexeme))
 	default:
 		return nil, errors.Errorf("unexpected token '%s'", tok)
 	}
@@ -165,4 +175,52 @@ func (p *parser) requireNext(oneOf ...tag) (token, error) {
 		}
 	}
 	return token{}, errors.Errorf("expected one of '%v', found '%s'", oneOf, t.tag)
+}
+
+func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
+	if strings.HasPrefix(lexme, "s") {
+		parts := strings.Split(lexme, "e")
+		if len(parts) == 0 || len(parts) > 2 {
+			return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
+		}
+		series, err := strconv.Atoi(strings.TrimLeft(parts[0], "s0"))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse series '%s' from given id %s", parts[0], lexme)
+		}
+		if len(parts) == 1 {
+			return []*Term{{
+				Field: "series",
+				Value: Int(int64(series)),
+				Op:    filter.CompOpEq,
+			}}, nil
+		}
+		if len(parts) == 2 {
+			episode, err := strconv.Atoi(strings.TrimLeft(parts[1], "e0"))
+			if err != nil {
+				return nil, fmt.Errorf("could not parse episode '%s' from given id %s", parts[1], lexme)
+			}
+			return []*Term{{
+				Field: "series",
+				Value: Int(int64(series)),
+				Op:    filter.CompOpEq,
+			}, {
+				Field: "episode",
+				Value: Int(int64(episode)),
+				Op:    filter.CompOpEq,
+			}}, nil
+		}
+		return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
+	}
+	if strings.HasPrefix(lexme, "e") {
+		episode, err := strconv.Atoi(strings.TrimLeft(lexme, "e0"))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse episode from given id %s", lexme)
+		}
+		return []*Term{{
+			Field: "episode",
+			Value: Int(int64(episode)),
+			Op:    filter.CompOpEq,
+		}}, nil
+	}
+	return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
 }

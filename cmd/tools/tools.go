@@ -31,6 +31,7 @@ func NewToolsCommand(logger *slog.Logger) *cobra.Command {
 
 var nameWithShortSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)[eE](?P<episode>\d+).*$`)
 var nameWithLongSeasonAndEpisode = regexp.MustCompile(`^.*[sS]eason (?P<series>\d+) [eE]pisode (?P<episode>\d+).*$`)
+var nameWithSplitSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)\.[eE](?P<episode>\d+).*$`)
 
 func NewFixNameCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,13 +45,17 @@ func NewFixNameCommand() *cobra.Command {
 			}
 
 			strName := strings.TrimSpace(string(rawName))
-			for _, re := range []*regexp.Regexp{nameWithShortSeasonAndEpisode, nameWithLongSeasonAndEpisode} {
+			for _, re := range []*regexp.Regexp{nameWithShortSeasonAndEpisode, nameWithLongSeasonAndEpisode, nameWithSplitSeasonAndEpisode} {
 				if re.MatchString(strName) {
 					series, episode, err := util.ParseSeriesAndEpisodeFromFileName(re, strName)
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(os.Stdout, "S%02dE%02d\n", series, episode)
+					fixedName := fmt.Sprintf("S%02dE%02d", series, episode)
+					if fixedName == strName {
+						return fmt.Errorf("rename was a noop")
+					}
+					fmt.Fprintf(os.Stdout, "%s\n", fixedName)
 					return nil
 				}
 			}

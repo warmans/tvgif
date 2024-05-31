@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"github.com/warmans/tvgif/pkg/search/mapping"
 )
 
@@ -14,6 +15,10 @@ type DialogDocument struct {
 	EndTimestamp   string `json:"end_timestamp"`
 	VideoFileName  string `json:"video_file_name"`
 	Content        string `json:"content"`
+}
+
+func (d DialogDocument) ShortEpisodeID() string {
+	return fmt.Sprintf("S%02dE%02d", d.Series, d.Episode)
 }
 
 func (d DialogDocument) FieldMapping() map[string]mapping.FieldType {

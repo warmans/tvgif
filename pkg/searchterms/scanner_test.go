@@ -24,6 +24,14 @@ func TestScan(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "scan number",
+			args: args{
+				str: "123",
+			},
+			want:    []token{{tag: tagInt, lexeme: "123"}, {tag: tagEOF}},
+			wantErr: false,
+		},
+		{
 			name: "scan words",
 			args: args{
 				str: "foo bar baz",
@@ -63,7 +71,7 @@ func TestScan(t *testing.T) {
 		{
 			name: "scan everything",
 			args: args{
-				str: `"man alive" @steve ~xfm foo`,
+				str: `"man alive" @steve ~xfm #s1 foo`,
 			},
 			want: []token{
 				{tag: tagQuotedString, lexeme: "man alive"},
@@ -71,6 +79,8 @@ func TestScan(t *testing.T) {
 				{tag: tagWord, lexeme: "steve"},
 				{tag: tagPublication, lexeme: "~"},
 				{tag: tagWord, lexeme: "xfm"},
+				{tag: tagId, lexeme: "#"},
+				{tag: tagWord, lexeme: "s1"},
 				{tag: tagWord, lexeme: "foo"},
 				{tag: tagEOF}},
 			wantErr: false,

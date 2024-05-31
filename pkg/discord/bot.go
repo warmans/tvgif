@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/mediacache"
@@ -261,11 +262,16 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
+			name := fmt.Sprintf("[%s] %s", v.EpisodeID, v.Content)
+			if publication != "" {
+				name = fmt.Sprintf("[%s] %s", v.ShortEpisodeID(), v.Content)
+			}
 			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
-				Name:  util.TrimToN(v.Content, 100),
+				Name:  util.TrimToN(name, 100),
 				Value: v.ID,
 			})
 		}
+		spew.Dump(choices)
 		if err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 			Data: &discordgo.InteractionResponseData{

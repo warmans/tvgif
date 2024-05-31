@@ -13,9 +13,11 @@ const (
 
 	tagMention     = "@"
 	tagPublication = "~"
+	tagId          = "#"
 
 	tagQuotedString = "QUOTED_STRING"
 	tagWord         = "WORD"
+	tagInt          = "INT"
 )
 
 type token struct {
@@ -75,9 +77,14 @@ func (s *scanner) next() (token, error) {
 		return s.emit(tagMention), nil
 	case '~':
 		return s.emit(tagPublication), nil
+	case '#':
+		return s.emit(tagId), nil
 	case '"':
 		return s.scanString()
 	default:
+		if isStartOfNumber(r) {
+			return s.scanNumber(), nil
+		}
 		if isValidInputRune(r) {
 			return s.scanWord()
 		}
@@ -124,6 +131,13 @@ func (s *scanner) scanWord() (token, error) {
 	return s.emit(tagWord), nil
 }
 
+func (s *scanner) scanNumber() token {
+	for !s.atEOF() && (isNumber(s.peekRune())) {
+		s.nextRune()
+	}
+	return s.emit(tagInt)
+}
+
 func (s *scanner) atEOF() bool {
 	return s.pos >= len(s.input)
 }
@@ -147,10 +161,17 @@ func isWhitespace(r rune) bool {
 }
 
 func isValidInputRune(r rune) bool {
-	return r != '@' && r != '~' && r != '"'
+	return r != '@' && r != '~' && r != '"' && r != '#'
 }
 
 func trimTokenLexeme(t token, trimSet string) token {
 	t.lexeme = strings.Trim(t.lexeme, trimSet)
 	return t
+}
+func isStartOfNumber(r rune) bool {
+	return isNumber(r) || r == '-'
+}
+
+func isNumber(r rune) bool {
+	return r >= '0' && r <= '9'
 }
