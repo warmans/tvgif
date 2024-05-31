@@ -91,10 +91,10 @@ func eliminateGaps(dialog []model.Dialog) []model.Dialog {
 	fixed := make([]model.Dialog, len(dialog))
 	for k, v := range dialog {
 		if k == len(dialog)-1 {
+			fixed[k] = v
 			break
 		}
-		nextLine := dialog[k+1]
-		v.EndTimestamp = limitDuration(v.StartTimestamp, nextLine.StartTimestamp, limits.MaxGifDuration)
+		v.EndTimestamp = limitDuration(v.StartTimestamp, dialog[k+1].StartTimestamp, limits.MaxGifDuration)
 		fixed[k] = v
 	}
 	return fixed
