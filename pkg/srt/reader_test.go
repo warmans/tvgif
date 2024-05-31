@@ -2,6 +2,7 @@ package srt
 
 import (
 	"github.com/stretchr/testify/require"
+	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/model"
 	"strings"
 	"testing"
@@ -62,10 +63,11 @@ func TestRead(t *testing.T) {
 			},
 			wantErr: require.NoError,
 		},
+		//todo: test limits and gaps
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Read(strings.NewReader(tt.args.source))
+			got, err := Read(strings.NewReader(tt.args.source), true, limits.MaxGifDuration)
 			if tt.wantErr != nil {
 				tt.wantErr(t, err)
 			}
