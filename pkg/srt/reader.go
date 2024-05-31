@@ -94,7 +94,7 @@ func eliminateGaps(dialog []model.Dialog) []model.Dialog {
 			fixed[k] = v
 			break
 		}
-		v.EndTimestamp = limitDuration(v.StartTimestamp, dialog[k+1].StartTimestamp, limits.MaxGifDuration)
+		v.EndTimestamp = limitDuration(v.StartTimestamp, max(dialog[k+1].StartTimestamp, v.EndTimestamp), limits.MaxGifDuration)
 		fixed[k] = v
 	}
 	return fixed
