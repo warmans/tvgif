@@ -529,21 +529,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
 		},
 	}
-	lowerButtons := []discordgo.MessageComponent{
-		discordgo.Button{
-			// Label is what the user will see on the button.
-			Label: "Customize Text",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🔧",
-			},
-			// Style provides coloring of the button. There are not so many styles tho.
-			Style: discordgo.SecondaryButton,
-			// Disabled allows bot to disable some buttons for users.
-			Disabled: false,
-			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tvgif_custom", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
-		},
-	}
+	lowerButtons := []discordgo.MessageComponent{}
 
 	//todo: need to check the total duration of the media to avoid it overflowing
 	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
@@ -627,6 +613,19 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 					Disabled: false,
 					// CustomID is a thing telling Discord which data to send when this button will be pressed.
 					CustomID: encodeCustomID("tvgif_confirm", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+				},
+				discordgo.Button{
+					// Label is what the user will see on the button.
+					Label: "Post with Custom Text",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "✅",
+					},
+					// Style provides coloring of the button. There are not so many styles tho.
+					Style: discordgo.PrimaryButton,
+					// Disabled allows bot to disable some buttons for users.
+					Disabled: false,
+					// CustomID is a thing telling Discord which data to send when this button will be pressed.
+					CustomID: encodeCustomID("tvgif_custom", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
 				},
 			},
 		},
