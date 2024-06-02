@@ -549,6 +549,21 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
 		lowerButtons = append(lowerButtons, discordgo.Button{
 			// Label is what the user will see on the button.
+			Label: "Trim 0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
+		})
+	}
+	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
+		lowerButtons = append(lowerButtons, discordgo.Button{
+			// Label is what the user will see on the button.
 			Label: "Trim 1s",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "✂",
