@@ -63,7 +63,7 @@ func writeMetadata(path string, e *model.Episode) error {
 	return enc.Encode(e)
 }
 
-func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, int64, int64, error) {
+func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, int32, int32, error) {
 
 	match := filePatternRegex.FindStringSubmatch(filename)
 	if len(match) < 3 {
@@ -79,7 +79,7 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	var err error
 	var seriesInt int64
 	if seriesStr, ok := result["series"]; ok && seriesStr != "" {
-		seriesInt, err = strconv.ParseInt(strings.TrimLeft(seriesStr, "0"), 10, 64)
+		seriesInt, err = strconv.ParseInt(strings.TrimLeft(seriesStr, "0"), 10, 32)
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("failed to parse matched series int %s: %w", seriesStr, err)
 		}
@@ -88,7 +88,7 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	}
 	var episodeInt int64
 	if episodeStr, ok := result["episode"]; ok && episodeStr != "" {
-		episodeInt, err = strconv.ParseInt(strings.TrimLeft(episodeStr, "0"), 10, 64)
+		episodeInt, err = strconv.ParseInt(strings.TrimLeft(episodeStr, "0"), 10, 32)
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("failed to parse matched episode int %s: %w", episodeStr, err)
 		}
@@ -99,7 +99,7 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	if publicationStr, ok := result["publication"]; ok && publicationStr != "" {
 		publication = publicationStr
 	}
-	return publication, seriesInt, episodeInt, nil
+	return publication, int32(seriesInt), int32(episodeInt), nil
 }
 
 func parseSRT(filePath string) ([]model.Dialog, error) {

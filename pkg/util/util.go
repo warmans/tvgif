@@ -50,3 +50,25 @@ func ParseSeriesAndEpisodeFromFileName(filePatternRegex *regexp.Regexp, filename
 	}
 	return seriesInt, episodeInt, nil
 }
+
+// ExtractSeriesAndEpisode e.g. S1E01
+func ExtractSeriesAndEpisode(raw string) (int32, int32, error) {
+	raw = strings.TrimPrefix(raw, "S")
+	parts := strings.Split(raw, "E")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("name was in wrong format: %s", raw)
+	}
+	series, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("series %s was not parsable: %w", parts[0], err)
+	}
+	episode, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, fmt.Errorf("episode %s was not parsable: %w", parts[1], err)
+	}
+	return int32(series), int32(episode), nil
+}
+
+func FormatSeriesAndEpisode(series int, episode int) string {
+	return fmt.Sprintf("S%02dE%02d", series, episode)
+}

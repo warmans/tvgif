@@ -170,7 +170,7 @@ func (j *BlugeQuery) condition(field string, op filter.CompOp, value filter.Valu
 }
 
 func (j *BlugeQuery) eqFilter(field string, value filter.Value) (bluge.Query, error) {
-	fieldMap := (model.DialogDocument{}).FieldMapping()
+	fieldMap := (&model.DialogDocument{}).FieldMapping()
 	t, ok := fieldMap[field]
 	if ok {
 		switch t {

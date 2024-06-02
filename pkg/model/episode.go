@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"github.com/warmans/tvgif/pkg/util"
 	"time"
 )
 
@@ -16,11 +17,11 @@ type Episode struct {
 	SRTFile     string   `json:"srt_file"`
 	VideoFile   string   `json:"video_file"`
 	Publication string   `json:"publication"`
-	Series      int64    `json:"season"`
-	Episode     int64    `json:"episode"`
+	Series      int32    `json:"season"`
+	Episode     int32    `json:"episode"`
 	Dialog      []Dialog `json:"dialog"`
 }
 
 func (e *Episode) ID() string {
-	return fmt.Sprintf("%s-S%02dE%02d", e.Publication, e.Series, e.Episode)
+	return fmt.Sprintf("%s-%s", e.Publication, util.FormatSeriesAndEpisode(int(e.Series), int(e.Episode)))
 }

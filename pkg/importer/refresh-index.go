@@ -82,7 +82,7 @@ func documentsFromPath(filePath string) ([]searchModel.DialogDocument, error) {
 	docs := []searchModel.DialogDocument{}
 	for _, v := range episode.Dialog {
 		docs = append(docs, searchModel.DialogDocument{
-			ID:             fmt.Sprintf("%s-%s:%s", episode.ID(), v.StartTimestamp, v.EndTimestamp),
+			ID:             fmt.Sprintf("%s-%d", episode.ID(), v.Pos),
 			EpisodeID:      episode.ID(),
 			Publication:    episode.Publication,
 			Series:         episode.Series,
