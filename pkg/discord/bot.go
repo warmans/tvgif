@@ -475,7 +475,20 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 	if err != nil {
 		return nil, err
 	}
-	buttons := []discordgo.MessageComponent{
+	shiftButtons := []discordgo.MessageComponent{
+		discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Shift 5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏪",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-(time.Second*5)))),
+		},
 		discordgo.Button{
 			// Label is what the user will see on the button.
 			Label: "Shift 1s",
@@ -502,9 +515,39 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
 			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+time.Second)),
 		},
+		discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Shift 5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏩",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
+		},
 	}
+	lowerButtons := []discordgo.MessageComponent{
+		discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Customize Text",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🔧",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID("tvgif_custom", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+		},
+	}
+
+	//todo: need to check the total duration of the media to avoid it overflowing
 	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
-		buttons = append(buttons, discordgo.Button{
+		lowerButtons = append(lowerButtons, discordgo.Button{
 			// Label is what the user will see on the button.
 			Label: "Trim 1s",
 			Emoji: &discordgo.ComponentEmoji{
@@ -519,7 +562,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)+time.Second <= limits.MaxGifDuration {
-		buttons = append(buttons, discordgo.Button{
+		lowerButtons = append(lowerButtons, discordgo.Button{
 			// Label is what the user will see on the button.
 			Label: "Extend 1s",
 			Emoji: &discordgo.ComponentEmoji{
@@ -533,10 +576,27 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+time.Second, customID.Shift)),
 		})
 	}
+	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*5) <= limits.MaxGifDuration {
+		lowerButtons = append(lowerButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Extend 5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*5), customID.Shift)),
+		})
+	}
 	return []discordgo.MessageComponent{
-		// ActionRow is a container of all buttons within the same row.
 		discordgo.ActionsRow{
-			Components: buttons,
+			Components: shiftButtons,
+		},
+		discordgo.ActionsRow{
+			Components: lowerButtons,
 		},
 		discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
@@ -552,19 +612,6 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 					Disabled: false,
 					// CustomID is a thing telling Discord which data to send when this button will be pressed.
 					CustomID: encodeCustomID("tvgif_confirm", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
-				},
-				discordgo.Button{
-					// Label is what the user will see on the button.
-					Label: "Customize Text",
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "🔧",
-					},
-					// Style provides coloring of the button. There are not so many styles tho.
-					Style: discordgo.SecondaryButton,
-					// Disabled allows bot to disable some buttons for users.
-					Disabled: false,
-					// CustomID is a thing telling Discord which data to send when this button will be pressed.
-					CustomID: encodeCustomID("tvgif_custom", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
 				},
 			},
 		},
