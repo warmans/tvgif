@@ -49,7 +49,27 @@ func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogD
 		}
 		return bluge.NewDateTimeField(fieldName, *dateField).Aggregatable(), true
 	case mapping.FieldTypeNumber:
-		return bluge.NewNumericField(fieldName, float64(d.GetNamedField(fieldName).(int32))), true
+		switch typed := d.GetNamedField(fieldName).(type) {
+		case float32:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case float64:
+			return bluge.NewNumericField(fieldName, typed), true
+		case int32:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case int64:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case int:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case int8:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case uint8:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		case int16:
+			return bluge.NewNumericField(fieldName, float64(typed)), true
+		default:
+			panic("non-numeric type mapped as number")
+		}
+
 	case mapping.FieldTypeShingles:
 		shingleAnalyzer := &analysis.Analyzer{
 			Tokenizer: tokenizer.NewUnicodeTokenizer(),
