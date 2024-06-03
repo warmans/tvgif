@@ -418,8 +418,6 @@ func (b *Bot) createVideoPreview(
 			b.logger.Error("edit failed. Failed to create buttons", slog.String("err", err.Error()))
 			return
 		}
-
-		b.logger.Info("Completed rendering")
 		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content:    util.ToPtr("Complete!" + interactionResponse.Data.Content),
 			Components: util.ToPtr(buttons),
@@ -835,7 +833,7 @@ func (b *Bot) renderGif(dialog model.DialogDocument, customText *string, customI
 		endTimestamp += customID.Shift
 	}
 	if customID.ExtendOrTrim != 0 {
-		endTimestamp = endTimestamp + customID.ExtendOrTrim
+		endTimestamp += customID.ExtendOrTrim
 		if endTimestamp <= startTimestamp {
 			endTimestamp = startTimestamp + time.Second
 		}
@@ -852,11 +850,9 @@ func (b *Bot) renderGif(dialog model.DialogDocument, customText *string, customI
 
 	startTime := time.Now()
 	buff := &bytes.Buffer{}
-
 	cacheHit, err := b.mediaCache.Get(dialog.ID, buff, disableCaching, func(writer io.Writer) error {
 
 		//todo: write content type headers?
-
 		err := ffmpeg_go.
 			Input(path.Join(b.mediaPath, dialog.VideoFileName),
 				ffmpeg_go.KwArgs{
@@ -886,9 +882,15 @@ func (b *Bot) renderGif(dialog model.DialogDocument, customText *string, customI
 	if cacheHit {
 		b.logger.Info("Cache hit", slog.Duration("time taken", time.Since(startTime)), slog.String("cache_key", dialog.ID))
 	} else {
-		b.logger.Info("Cache miss", slog.Duration("time taken", time.Since(startTime)), slog.String("cache_key", dialog.ID))
+		b.logger.Info(
+			"Cache miss",
+			slog.Duration("time taken", time.Since(startTime)),
+			slog.String("cache_key", dialog.ID),
+			slog.String("source", dialog.VideoFileName),
+			slog.Duration("from", startTimestamp),
+			slog.Duration("to", endTimestamp),
+		)
 	}
-
 	return &discordgo.File{
 		Name:        createFileName(dialog, "gif"),
 		ContentType: "image/gif",
