@@ -693,7 +693,7 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
 		return
 	}
-	if err := b.completeResponse(s, i, *dialog, username, util.ToPtr(""), customID, false); err != nil {
+	if err := b.completeResponse(s, i, *dialog, username, nil, customID, false); err != nil {
 		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
 	}
 }
