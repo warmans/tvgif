@@ -955,36 +955,28 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 
 			return nil
 		})
-		if err != nil {
-			logger.Error("cache fetch failed", slog.String("err", err.Error()))
-			return nil, err
-		}
 	}
-
-	if cacheHit {
-		logger.Info(
-			"Cache hit",
-			slog.Duration("time taken", time.Since(startTime)),
-		)
-	} else {
-		logger.Info(
-			"Cache miss",
-			slog.Duration("time taken", time.Since(startTime)),
-		)
+	if err != nil {
+		logger.Error("cache fetch failed", slog.String("err", err.Error()))
+		return nil, err
 	}
+	logger.Info(
+		"Cache result",
+		slog.Bool("hit", cacheHit),
+		slog.Duration("time taken", time.Since(startTime)),
+	)
 	if video {
 		return &discordgo.File{
 			Name:        createFileName(dialog, "webm"),
 			ContentType: "video/webm",
 			Reader:      buff,
 		}, nil
-	} else {
-		return &discordgo.File{
-			Name:        createFileName(dialog, "gif"),
-			ContentType: "image/gif",
-			Reader:      buff,
-		}, nil
 	}
+	return &discordgo.File{
+		Name:        createFileName(dialog, "gif"),
+		ContentType: "image/gif",
+		Reader:      buff,
+	}, nil
 }
 
 func createFileName(dialog model.DialogDocument, suffix string) string {
