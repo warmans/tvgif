@@ -112,12 +112,13 @@ func NewBot(
 		"tvgif": bot.queryBegin,
 	}
 	bot.buttonHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
-		"tvgif_confirm": bot.queryComplete,
-		"tvgif_custom":  bot.editModal,
-		"tgif_update":   bot.updatePreview,
+		"cfrmg": bot.postGif,
+		"cfrmv": bot.postVideo,
+		"cstm":  bot.editModal,
+		"upd":   bot.updatePreview,
 	}
 	bot.modalHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
-		"tvgif_confirm": bot.queryCompleteCustom,
+		"cfrmg": bot.postCustomGif,
 	}
 
 	return bot, nil
@@ -223,7 +224,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
 			return
 		}
-		if err := b.createVideoPreview(s, i, *res, username, customID); err != nil {
+		if err := b.createGifPreview(s, i, *res, username, customID); err != nil {
 			b.logger.Error("Failed to begin video response", slog.String("err", err.Error()))
 		}
 		return
@@ -312,7 +313,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 
-	interactionResponse, err := b.buildGifResponse(*dialog, username, true, nil, customID)
+	interactionResponse, err := b.buildResponse(*dialog, username, true, nil, customID, false)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			return
@@ -338,7 +339,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	go func() {
-		interactionResponse, err = b.buildGifResponse(*dialog, username, false, nil, customID)
+		interactionResponse, err = b.buildResponse(*dialog, username, false, nil, customID, false)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -370,7 +371,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 	}()
 }
 
-func (b *Bot) createVideoPreview(
+func (b *Bot) createGifPreview(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
 	dialog model.DialogDocument,
@@ -378,7 +379,7 @@ func (b *Bot) createVideoPreview(
 	customID *customIdPayload,
 ) error {
 	// send a placeholder
-	interactionResponse, err := b.buildGifResponse(dialog, username, true, nil, customID)
+	interactionResponse, err := b.buildResponse(dialog, username, true, nil, customID, false)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			fmt.Println("Duplicated interaction")
@@ -395,7 +396,7 @@ func (b *Bot) createVideoPreview(
 
 	// update with the gif
 	go func() {
-		interactionResponse, err = b.buildGifResponse(dialog, username, false, nil, customID)
+		interactionResponse, err = b.buildResponse(dialog, username, false, nil, customID, false)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -445,7 +446,7 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, cu
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID: encodeCustomID("tvgif_confirm", customIDPayload),
+			CustomID: encodeCustomID("cfrmg", customIDPayload),
 			Title:    "Edit and Post GIF (no preview)",
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
@@ -485,7 +486,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-(time.Second*5)))),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-(time.Second*5)))),
 		},
 		discordgo.Button{
 			// Label is what the user will see on the button.
@@ -498,7 +499,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-time.Second))),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-time.Second))),
 		},
 		discordgo.Button{
 			// Label is what the user will see on the button.
@@ -511,7 +512,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+time.Second)),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+time.Second)),
 		},
 		discordgo.Button{
 			// Label is what the user will see on the button.
@@ -524,7 +525,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
 		},
 	}
 	lowerButtons := []discordgo.MessageComponent{}
@@ -542,7 +543,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
@@ -557,7 +558,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-time.Second, customID.Shift)),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-time.Second, customID.Shift)),
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)+time.Second <= limits.MaxGifDuration {
@@ -572,7 +573,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+time.Second, customID.Shift)),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+time.Second, customID.Shift)),
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*5) <= limits.MaxGifDuration {
@@ -587,7 +588,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID("tgif_update", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*5), customID.Shift)),
+			CustomID: encodeCustomID("upd", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*5), customID.Shift)),
 		})
 	}
 	return []discordgo.MessageComponent{
@@ -601,7 +602,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			Components: []discordgo.MessageComponent{
 				discordgo.Button{
 					// Label is what the user will see on the button.
-					Label: "Post",
+					Label: "Post GIF",
 					Emoji: &discordgo.ComponentEmoji{
 						Name: "✅",
 					},
@@ -610,11 +611,11 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 					// Disabled allows bot to disable some buttons for users.
 					Disabled: false,
 					// CustomID is a thing telling Discord which data to send when this button will be pressed.
-					CustomID: encodeCustomID("tvgif_confirm", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+					CustomID: encodeCustomID("cfrmg", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
 				},
 				discordgo.Button{
 					// Label is what the user will see on the button.
-					Label: "Post with Custom Text",
+					Label: "Post GIF with Custom Text",
 					Emoji: &discordgo.ComponentEmoji{
 						Name: "✅",
 					},
@@ -623,14 +624,27 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 					// Disabled allows bot to disable some buttons for users.
 					Disabled: false,
 					// CustomID is a thing telling Discord which data to send when this button will be pressed.
-					CustomID: encodeCustomID("tvgif_custom", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+					CustomID: encodeCustomID("cstm", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+				},
+				discordgo.Button{
+					// Label is what the user will see on the button.
+					Label: "Post video",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "✅",
+					},
+					// Style provides coloring of the button. There are not so many styles tho.
+					Style: discordgo.PrimaryButton,
+					// Disabled allows bot to disable some buttons for users.
+					Disabled: false,
+					// CustomID is a thing telling Discord which data to send when this button will be pressed.
+					CustomID: encodeCustomID("cfrmv", idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
 				},
 			},
 		},
 	}, nil
 }
 
-func (b *Bot) queryCompleteCustom(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
 	if customIDPayload == "" {
 		b.respondError(s, i, fmt.Errorf("missing customID"))
 		return
@@ -651,12 +665,12 @@ func (b *Bot) queryCompleteCustom(s *discordgo.Session, i *discordgo.Interaction
 	}
 	customText := i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 
-	if err = b.completeVideoResponse(s, i, *dialog, username, util.ToPtr(customText), customID); err != nil {
+	if err = b.completeResponse(s, i, *dialog, username, util.ToPtr(customText), customID, false); err != nil {
 		b.respondError(s, i, err)
 	}
 }
 
-func (b *Bot) queryComplete(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
 
 	if i.Type != discordgo.InteractionMessageComponent {
 		return
@@ -679,14 +693,49 @@ func (b *Bot) queryComplete(s *discordgo.Session, i *discordgo.InteractionCreate
 		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
 		return
 	}
-	if err := b.completeVideoResponse(s, i, *dialog, username, nil, customID); err != nil {
+	if err := b.completeResponse(s, i, *dialog, username, util.ToPtr(""), customID, false); err != nil {
 		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
 	}
 }
 
-func (b *Bot) completeVideoResponse(s *discordgo.Session, i *discordgo.InteractionCreate, dialog model.DialogDocument, username string, customText *string, customID *customIdPayload) error {
+func (b *Bot) postVideo(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
 
-	interactionResponse, err := b.buildGifResponse(dialog, username, true, nil, customID)
+	if i.Type != discordgo.InteractionMessageComponent {
+		return
+	}
+	if customIDPayload == "" {
+		b.respondError(s, i, fmt.Errorf("missing customID"))
+		return
+	}
+	customID, err := parseCustomIDPayload(customIDPayload)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("invalid customID"))
+		return
+	}
+	username := "unknown"
+	if i.Member != nil {
+		username = i.Member.DisplayName()
+	}
+	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
+		return
+	}
+	if err := b.completeResponse(s, i, *dialog, username, nil, customID, true); err != nil {
+		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
+	}
+}
+
+func (b *Bot) completeResponse(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	dialog model.DialogDocument,
+	username string,
+	customText *string,
+	customID *customIdPayload,
+	video bool,
+) error {
+	interactionResponse, err := b.buildResponse(dialog, username, true, nil, customID, video)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			fmt.Println("Duplicated interaction")
@@ -702,7 +751,7 @@ func (b *Bot) completeVideoResponse(s *discordgo.Session, i *discordgo.Interacti
 		return fmt.Errorf("failed to respond: %w", err)
 	}
 	go func() {
-		interactionResponse, err = b.buildGifResponse(dialog, username, false, customText, customID)
+		interactionResponse, err = b.buildResponse(dialog, username, false, customText, customID, video)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -726,7 +775,14 @@ func (b *Bot) completeVideoResponse(s *discordgo.Session, i *discordgo.Interacti
 	return nil
 }
 
-func (b *Bot) buildGifResponse(dialog model.DialogDocument, username string, placeholder bool, customText *string, customID *customIdPayload) (*discordgo.InteractionResponse, error) {
+func (b *Bot) buildResponse(
+	dialog model.DialogDocument,
+	username string,
+	placeholder bool,
+	customText *string,
+	customID *customIdPayload,
+	video bool,
+) (*discordgo.InteractionResponse, error) {
 	cleanup, err := lockRenderer(username, dialog.ID)
 	defer cleanup()
 	if err != nil {
@@ -743,14 +799,14 @@ func (b *Bot) buildGifResponse(dialog model.DialogDocument, username string, pla
 
 	var bodyText string
 	if !placeholder {
-		gif, err := b.renderGif(dialog, customText, customID)
+		gif, err := b.renderFile(dialog, customText, customID, video)
 		if err != nil {
 			return nil, err
 		}
 		files = []*discordgo.File{gif}
 		bodyText = ""
 	} else {
-		bodyText = ":timer: Rendering gif..."
+		bodyText = ":timer: Rendering..."
 	}
 	editLabel := ""
 	if customText != nil {
@@ -776,7 +832,7 @@ func (b *Bot) buildGifResponse(dialog model.DialogDocument, username string, pla
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n`%s@%s-%s%s%s`%s | Posted by %s",
+				"%s\n\n`%s@%s-%s%s%s%s` | Posted by %s",
 				bodyText,
 				dialog.ID,
 				dialog.StartTimestamp,
@@ -807,8 +863,7 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 	}
 }
 
-func (b *Bot) renderGif(dialog model.DialogDocument, customText *string, customID *customIdPayload) (*discordgo.File, error) {
-
+func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, customID *customIdPayload, video bool) (*discordgo.File, error) {
 	disableCaching := customID.ExtendOrTrim != 0 || customID.Shift != 0
 	dialogText := strings.Split(dialog.Content, "\n")
 	if customText != nil {
@@ -841,61 +896,95 @@ func (b *Bot) renderGif(dialog model.DialogDocument, customText *string, customI
 	if endTimestamp-startTimestamp > limits.MaxGifDuration {
 		endTimestamp = startTimestamp + limits.MaxGifDuration
 	}
-	b.logger.Debug(
-		"Exporting gif",
-		slog.Duration("start", startTimestamp),
-		slog.Duration("end", endTimestamp),
+
+	logger := b.logger.With(
+		slog.String("cache_key", dialog.ID),
+		slog.String("source", dialog.VideoFileName),
+		slog.Duration("from", startTimestamp),
+		slog.Duration("to", endTimestamp),
+		slog.Bool("video", video),
 		slog.String("custom_text", strings.Join(dialogText, " ")),
 	)
+	logger.Debug("Exporting gif")
 
 	startTime := time.Now()
+
 	buff := &bytes.Buffer{}
-	cacheHit, err := b.mediaCache.Get(dialog.ID, buff, disableCaching, func(writer io.Writer) error {
-
-		//todo: write content type headers?
-		err := ffmpeg_go.
-			Input(path.Join(b.mediaPath, dialog.VideoFileName),
-				ffmpeg_go.KwArgs{
-					"ss": fmt.Sprintf("%0.2f", startTimestamp.Seconds()),
-					"to": fmt.Sprintf("%0.2f", endTimestamp.Seconds()),
-				}).
-			Output("pipe:",
-				ffmpeg_go.KwArgs{
-					"format": "gif",
-					"filter_complex": fmt.Sprintf(
-						"[0:v]drawtext=text='%s':fontcolor=white:fontsize=16:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10))",
-						formatGifText(56, dialogText),
-					),
-				},
-			).WithOutput(writer, os.Stderr).Run()
-		if err != nil {
-			b.logger.Error("ffmpeg failed", slog.String("err", err.Error()))
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
-		b.logger.Error("cache fetch failed", slog.String("err", err.Error()))
-		return nil, err
-	}
-	if cacheHit {
-		b.logger.Info("Cache hit", slog.Duration("time taken", time.Since(startTime)), slog.String("cache_key", dialog.ID))
+	var cacheHit bool
+	if video {
+		cacheHit, err = b.mediaCache.Get(fmt.Sprintf("%s.webm", dialog.ID), buff, disableCaching, func(writer io.Writer) error {
+			err := ffmpeg_go.
+				Input(path.Join(b.mediaPath, dialog.VideoFileName),
+					ffmpeg_go.KwArgs{
+						"ss": fmt.Sprintf("%0.2f", startTimestamp.Seconds()),
+					}).
+				Output("pipe:",
+					ffmpeg_go.KwArgs{
+						"t":            fmt.Sprintf("%0.2f", endTimestamp.Seconds()-startTimestamp.Seconds()),
+						"map_metadata": "-1",
+						"format":       "webm",
+					},
+				).WithOutput(writer, os.Stderr).Run()
+			if err != nil {
+				b.logger.Error("ffmpeg failed", slog.String("err", err.Error()))
+				return err
+			}
+			return nil
+		})
 	} else {
-		b.logger.Info(
+		cacheHit, err = b.mediaCache.Get(fmt.Sprintf("%s.gif", dialog.ID), buff, disableCaching, func(writer io.Writer) error {
+			err := ffmpeg_go.
+				Input(path.Join(b.mediaPath, dialog.VideoFileName),
+					ffmpeg_go.KwArgs{
+						"ss": fmt.Sprintf("%0.2f", startTimestamp.Seconds()),
+						"to": fmt.Sprintf("%0.2f", endTimestamp.Seconds()),
+					}).
+				Output("pipe:",
+					ffmpeg_go.KwArgs{
+						"format": "gif",
+						"filter_complex": fmt.Sprintf(
+							"[0:v]drawtext=text='%s':fontcolor=white:fontsize=16:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10))",
+							formatGifText(56, dialogText),
+						),
+					},
+				).WithOutput(writer, os.Stderr).Run()
+			if err != nil {
+				logger.Error("ffmpeg failed", slog.String("err", err.Error()))
+				return err
+			}
+
+			return nil
+		})
+		if err != nil {
+			logger.Error("cache fetch failed", slog.String("err", err.Error()))
+			return nil, err
+		}
+	}
+
+	if cacheHit {
+		logger.Info(
+			"Cache hit",
+			slog.Duration("time taken", time.Since(startTime)),
+		)
+	} else {
+		logger.Info(
 			"Cache miss",
 			slog.Duration("time taken", time.Since(startTime)),
-			slog.String("cache_key", dialog.ID),
-			slog.String("source", dialog.VideoFileName),
-			slog.Duration("from", startTimestamp),
-			slog.Duration("to", endTimestamp),
 		)
 	}
-	return &discordgo.File{
-		Name:        createFileName(dialog, "gif"),
-		ContentType: "image/gif",
-		Reader:      buff,
-	}, nil
+	if video {
+		return &discordgo.File{
+			Name:        createFileName(dialog, "webm"),
+			ContentType: "video/webm",
+			Reader:      buff,
+		}, nil
+	} else {
+		return &discordgo.File{
+			Name:        createFileName(dialog, "gif"),
+			ContentType: "image/gif",
+			Reader:      buff,
+		}, nil
+	}
 }
 
 func createFileName(dialog model.DialogDocument, suffix string) string {
