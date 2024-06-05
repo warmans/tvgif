@@ -39,11 +39,11 @@ func (c *Cache) Get(key string, writeTo io.Writer, noCache bool, fetchFn func(wr
 	}
 
 	// cached file doesn't exist
-	err = func() error {
+	cacheFileCreated, err := func() (bool, error) {
 		newFile, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 		if err != nil {
 			c.logger.Error("failed to create cached file", slog.String("file_path", filePath), slog.String("err", err.Error()))
-			return fetchFn(writeTo)
+			return false, fetchFn(writeTo)
 		}
 		defer func() {
 			if err := newFile.Close(); err != nil {
@@ -52,24 +52,20 @@ func (c *Cache) Get(key string, writeTo io.Writer, noCache bool, fetchFn func(wr
 		}()
 		if err = syscall.Flock(int(newFile.Fd()), syscall.LOCK_EX); err != nil {
 			c.logger.Error("failed to lock file for writing", slog.String("file_path", filePath), slog.String("err", err.Error()))
-			return fetchFn(writeTo)
+			return true, fetchFn(writeTo)
 		}
 		defer func() {
 			if err := syscall.Flock(int(newFile.Fd()), syscall.LOCK_UN); err != nil {
 				panic(fmt.Sprintf("failed to unlock file after write: %s", err.Error()))
 			}
 		}()
-		err = fetchFn(io.MultiWriter(writeTo, newFile))
-		if err != nil {
-			if rmErr := os.Remove(filePath); rmErr != nil {
-				c.logger.Error("failed to remove cached file after write error", slog.String("file_path", filePath), slog.String("err", rmErr.Error()))
-			}
-		}
-		return err
+		return true, fetchFn(io.MultiWriter(writeTo, newFile))
 	}()
 	if err != nil {
-		if err := os.Remove(filePath); err != nil {
-			c.logger.Error("failed to remove cached file after write error", slog.String("file_path", filePath), slog.String("err", err.Error()))
+		if cacheFileCreated {
+			if err := os.Remove(filePath); err != nil {
+				c.logger.Error("failed to remove cached file after write error.", slog.String("file_path", filePath), slog.String("err", err.Error()))
+			}
 		}
 	}
 	return false, err
