@@ -564,6 +564,19 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 		},
 		discordgo.Button{
 			// Label is what the user will see on the button.
+			Label: "Shift 0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏩",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second/2))),
+		},
+		discordgo.Button{
+			// Label is what the user will see on the button.
 			Label: "Shift 1s",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "⏩",
@@ -589,40 +602,24 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
 		},
 	}
-	lowerButtons := []discordgo.MessageComponent{}
-	//todo: need to check the total duration of the media to avoid it overflowing
-	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
-		lowerButtons = append(lowerButtons, discordgo.Button{
+	extendButtons := []discordgo.MessageComponent{}
+	if (dialogDuration+customID.ExtendOrTrim)+(time.Second/2) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
 			// Label is what the user will see on the button.
-			Label: "Trim 0.5s",
+			Label: "Extend 0.5s",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
+				Name: "➕",
 			},
 			// Style provides coloring of the button. There are not so many styles tho.
 			Style: discordgo.SecondaryButton,
 			// Disabled allows bot to disable some buttons for users.
 			Disabled: false,
 			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
-		lowerButtons = append(lowerButtons, discordgo.Button{
-			// Label is what the user will see on the button.
-			Label: "Trim 1s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			// Style provides coloring of the button. There are not so many styles tho.
-			Style: discordgo.SecondaryButton,
-			// Disabled allows bot to disable some buttons for users.
-			Disabled: false,
-			// CustomID is a thing telling Discord which data to send when this button will be pressed.
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-time.Second, customID.Shift)),
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second/2), customID.Shift)),
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)+time.Second <= limits.MaxGifDuration {
-		lowerButtons = append(lowerButtons, discordgo.Button{
+		extendButtons = append(extendButtons, discordgo.Button{
 			// Label is what the user will see on the button.
 			Label: "Extend 1s",
 			Emoji: &discordgo.ComponentEmoji{
@@ -637,7 +634,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 		})
 	}
 	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*5) <= limits.MaxGifDuration {
-		lowerButtons = append(lowerButtons, discordgo.Button{
+		extendButtons = append(extendButtons, discordgo.Button{
 			// Label is what the user will see on the button.
 			Label: "Extend 5s",
 			Emoji: &discordgo.ComponentEmoji{
@@ -651,12 +648,92 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*5), customID.Shift)),
 		})
 	}
+	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*10) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Extend 10s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*10), customID.Shift)),
+		})
+	}
+	trimButtons := []discordgo.MessageComponent{}
+	//todo: need to check the total duration of the media to avoid it overflowing
+	if (dialogDuration+customID.ExtendOrTrim)-(time.Second/2) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Trim 0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
+		})
+	}
+	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Trim 1s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-time.Second, customID.Shift)),
+		})
+	}
+	if (dialogDuration+customID.ExtendOrTrim)-(time.Second*5) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Trim 5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second*5), customID.Shift)),
+		})
+	}
+	if (dialogDuration+customID.ExtendOrTrim)-(time.Second*10) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			// Label is what the user will see on the button.
+			Label: "Trim 10s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			// Style provides coloring of the button. There are not so many styles tho.
+			Style: discordgo.SecondaryButton,
+			// Disabled allows bot to disable some buttons for users.
+			Disabled: false,
+			// CustomID is a thing telling Discord which data to send when this button will be pressed.
+			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second*10), customID.Shift)),
+		})
+	}
 	return []discordgo.MessageComponent{
 		discordgo.ActionsRow{
 			Components: shiftButtons,
 		},
 		discordgo.ActionsRow{
-			Components: lowerButtons,
+			Components: extendButtons,
+		},
+		discordgo.ActionsRow{
+			Components: trimButtons,
 		},
 		discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
