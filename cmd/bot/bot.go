@@ -21,6 +21,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	var mediaPath string
 	var cachePath string
 	var discordToken string
+	var botUsername string
 
 	var populateIndexOnStart bool
 	var indexPath string
@@ -76,7 +77,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			}
 
 			logger.Info("Starting bot...")
-			bot, err := discord.NewBot(logger, session, search.NewBlugeSearch(reader), mediaCache, mediaPath)
+			bot, err := discord.NewBot(logger, session, search.NewBlugeSearch(reader), mediaCache, mediaPath, botUsername)
 			if err != nil {
 				return fmt.Errorf("failed to create bot: %w", err)
 			}
@@ -99,6 +100,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	flag.StringVarEnv(cmd.Flags(), &mediaPath, "", "media-path", "./var/media", "path to media files")
 	flag.StringVarEnv(cmd.Flags(), &discordToken, "", "discord-token", "", "discord auth token")
 	flag.StringVarEnv(cmd.Flags(), &cachePath, "", "cache-path", "", "path to cache dir")
+	flag.StringVarEnv(cmd.Flags(), &botUsername, "", "bot-username", "tvgif", "bot username and differentiator, used to determine if a message belongs to the bot e.g. tvgif#213")
 
 	flag.BoolVarEnv(cmd.Flags(), &populateIndexOnStart, "", "populate-index", true, "automatically create indexes and metadata from the media dir")
 	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")

@@ -26,6 +26,13 @@ import (
 	"time"
 )
 
+type Command string
+
+const (
+	CommandSearch Command = "tvgif"
+	CommandDelete Command = "tvgif-delete"
+)
+
 type Action string
 
 const (
@@ -44,6 +51,7 @@ const (
 var punctuation = regexp.MustCompile(`[^a-zA-Z0-9\s]+`)
 var spaces = regexp.MustCompile(`[\s]{2,}`)
 var metaWhitespace = regexp.MustCompile(`[\n\r\t]+`)
+var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
 
 var rendersInProgress = map[string]string{}
 var renderMutex = sync.RWMutex{}
@@ -121,6 +129,7 @@ func NewBot(
 	searcher search.Searcher,
 	mediaCache *mediacache.Cache,
 	mediaPath string,
+	botUsername string,
 ) (*Bot, error) {
 
 	publications, err := searcher.ListTerms(context.Background(), "publication")
@@ -136,14 +145,15 @@ func NewBot(
 	}
 
 	bot := &Bot{
-		logger:     logger,
-		session:    session,
-		searcher:   searcher,
-		mediaCache: mediaCache,
-		mediaPath:  mediaPath,
+		logger:      logger,
+		session:     session,
+		searcher:    searcher,
+		mediaCache:  mediaCache,
+		mediaPath:   mediaPath,
+		botUsername: botUsername,
 		commands: []*discordgo.ApplicationCommand{
 			{
-				Name:        "tvgif",
+				Name:        string(CommandSearch),
 				Description: "Search for a TV show gif",
 				Type:        discordgo.ChatApplicationCommand,
 				Options: []*discordgo.ApplicationCommandOption{
@@ -169,10 +179,15 @@ func NewBot(
 					},
 				},
 			},
+			{
+				Name: string(CommandDelete),
+				Type: discordgo.MessageApplicationCommand,
+			},
 		},
 	}
 	bot.commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"tvgif": bot.queryBegin,
+		string(CommandSearch): bot.queryBegin,
+		string(CommandDelete): bot.deletePost,
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:      bot.postGif,
@@ -192,6 +207,7 @@ type Bot struct {
 	searcher        search.Searcher
 	mediaCache      *mediacache.Cache
 	mediaPath       string
+	botUsername     string
 	commands        []*discordgo.ApplicationCommand
 	commandHandlers map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 	buttonHandlers  map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, customIdPayload string)
@@ -261,6 +277,73 @@ func (b *Bot) Close() error {
 	return b.session.Close()
 }
 
+func (b *Bot) deletePost(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	data, ok := i.Data.(discordgo.ApplicationCommandInteractionData)
+	if !ok {
+		b.respondError(s, i, fmt.Errorf("wrong message type recieved: %T", i.Data))
+		return
+	}
+
+	author := i.Data.(discordgo.ApplicationCommandInteractionData).Resolved.Messages[data.TargetID].Author
+	if author.String() != b.botUsername {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Failed: Message doesn't belong to %s", b.botUsername),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to create response"))
+		}
+		return
+	}
+
+	msgContent := i.Data.(discordgo.ApplicationCommandInteractionData).Resolved.Messages[data.TargetID].Content
+	results := postedByUser.FindStringSubmatch(msgContent)
+	if len(results) != 2 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Failed: Couldn't identify poster",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to create response"))
+		}
+		return
+	}
+	if results[1] != uniqueUser(i.Member) {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Failed: you didn't post that gif",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to create response"))
+		}
+		return
+	}
+
+	if err := s.ChannelMessageDelete(i.ChannelID, data.TargetID); err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to delete message: %w", err))
+		return
+	}
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Deleted!",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to create response"))
+	}
+}
+
 func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	switch i.Type {
@@ -273,7 +356,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		username := "unknown"
 		if i.Member != nil {
-			username = i.Member.DisplayName()
+			username = uniqueUser(i.Member)
 		}
 		customID, err := parseCustomIDPayload(selection)
 		if err != nil {
@@ -359,7 +442,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 	b.logger.Info("Editing...")
 	username := "unknown"
 	if i.Member != nil {
-		username = i.Member.DisplayName()
+		username = uniqueUser(i.Member)
 	}
 
 	customID, err := parseCustomIDPayload(customIDPayload)
@@ -780,7 +863,7 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 	username := "unknown"
 	if i.Member != nil {
-		username = i.Member.DisplayName()
+		username = uniqueUser(i.Member)
 	}
 	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
 	if err != nil {
@@ -810,7 +893,7 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 	}
 	username := "unknown"
 	if i.Member != nil {
-		username = i.Member.DisplayName()
+		username = uniqueUser(i.Member)
 	}
 	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
 	if err != nil {
@@ -928,7 +1011,7 @@ func (b *Bot) buildInteractionResponse(
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n`%s@%s-%s%s%s%s` | Posted by %s",
+				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`",
 				bodyText,
 				dialog.ID,
 				dialog.StartTimestamp,
@@ -1200,4 +1283,15 @@ func parseCustomIDPayload(payloadStr string) (*customIdPayload, error) {
 		payload.Shift = shift
 	}
 	return payload, nil
+}
+
+func uniqueUser(m *discordgo.Member) string {
+	return m.DisplayName() + " (" + shortID(m.User.ID) + ")"
+}
+
+func shortID(longID string) string {
+	if len(longID) < 6 {
+		return longID
+	}
+	return longID[len(longID)-6:]
 }
