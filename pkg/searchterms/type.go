@@ -3,8 +3,9 @@ package searchterms
 type Type string
 
 const (
-	IntType    Type = "int"
-	StringType Type = "string"
+	IntType      Type = "int"
+	StringType   Type = "string"
+	DurationType Type = "duration"
 )
 
 func (t Type) Kind() Type {

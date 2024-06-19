@@ -1,7 +1,7 @@
 package model
 
 import (
-	"fmt"
+	"github.com/blugelabs/bluge"
 	"github.com/warmans/tvgif/pkg/search/mapping"
 	"github.com/warmans/tvgif/pkg/util"
 	"time"
@@ -13,8 +13,8 @@ type DialogDocument struct {
 	Publication    string `json:"publication"`
 	Series         int32  `json:"series"`
 	Episode        int32  `json:"episode"`
-	StartTimestamp string `json:"start_timestamp"`
-	EndTimestamp   string `json:"end_timestamp"`
+	StartTimestamp int64  `json:"start_timestamp"`
+	EndTimestamp   int64  `json:"end_timestamp"`
 	VideoFileName  string `json:"video_file_name"`
 	Content        string `json:"content"`
 }
@@ -30,23 +30,15 @@ func (d *DialogDocument) FieldMapping() map[string]mapping.FieldType {
 		"publication":     mapping.FieldTypeKeyword,
 		"series":          mapping.FieldTypeNumber,
 		"episode":         mapping.FieldTypeNumber,
-		"start_timestamp": mapping.FieldTypeText,
-		"end_timestamp":   mapping.FieldTypeText,
+		"start_timestamp": mapping.FieldTypeNumber,
+		"end_timestamp":   mapping.FieldTypeNumber,
 		"video_file_name": mapping.FieldTypeText,
 		"content":         mapping.FieldTypeText,
 	}
 }
 
-func (d *DialogDocument) Duration() (time.Duration, error) {
-	startTimestamp, err := time.ParseDuration(d.StartTimestamp)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse start time: %w", err)
-	}
-	endTimestamp, err := time.ParseDuration(d.EndTimestamp)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse start time: %w", err)
-	}
-	return endTimestamp - startTimestamp, nil
+func (d *DialogDocument) Duration() time.Duration {
+	return (time.Millisecond * time.Duration(d.EndTimestamp)) - (time.Millisecond * time.Duration(d.StartTimestamp))
 }
 
 func (d *DialogDocument) GetNamedField(name string) any {
@@ -76,23 +68,32 @@ func (d *DialogDocument) GetNamedField(name string) any {
 func (d *DialogDocument) SetNamedField(name string, value any) {
 	switch name {
 	case "_id":
-		d.ID = value.(string)
+		d.ID = string(value.([]byte))
 	case "episode_id":
 
-		d.EpisodeID = value.(string)
+		d.EpisodeID = string(value.([]byte))
 	case "publication":
-		d.Publication = value.(string)
+		d.Publication = string(value.([]byte))
 	case "series":
-		d.Series = value.(int32) // these never seem to be set by VisitStoredFields
+		d.Series = int32(bytesToFloatOrZero(value))
 	case "episode":
-		d.Episode = value.(int32) // these never seem to be set by VisitStoredFields
+		d.Episode = int32(bytesToFloatOrZero(value))
 	case "start_timestamp":
-		d.StartTimestamp = value.(string)
+		d.StartTimestamp = int64(bytesToFloatOrZero(value))
 	case "end_timestamp":
-		d.EndTimestamp = value.(string)
+		d.EndTimestamp = int64(bytesToFloatOrZero(value))
 	case "video_file_name":
-		d.VideoFileName = value.(string)
+		d.VideoFileName = string(value.([]byte))
 	case "content":
-		d.Content = value.(string)
+		d.Content = string(value.([]byte))
 	}
+}
+
+func bytesToFloatOrZero(val any) float64 {
+	bytes := val.([]byte)
+	float, err := bluge.DecodeNumericFloat64(bytes)
+	if err != nil {
+		return 0
+	}
+	return float
 }

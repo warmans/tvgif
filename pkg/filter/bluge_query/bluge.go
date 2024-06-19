@@ -98,6 +98,10 @@ func (j *BlugeQuery) condition(field string, op filter.CompOp, value filter.Valu
 			q := bluge.NewNumericRangeQuery(value.Value().(float64), math.MaxFloat64)
 			q.SetField(field)
 			return q, nil
+		case filter.DurationType:
+			q := bluge.NewNumericRangeQuery(float64(value.Value().(time.Duration).Milliseconds()), math.MaxFloat64)
+			q.SetField(field)
+			return q, nil
 		case filter.StringType:
 			// todo: how to handle dates? they don't have a special type so we would need to look
 			// at the document mapping
@@ -115,6 +119,10 @@ func (j *BlugeQuery) condition(field string, op filter.CompOp, value filter.Valu
 			return q, nil
 		case filter.FloatType:
 			q := bluge.NewNumericRangeQuery(0-math.MaxFloat64, value.Value().(float64))
+			q.SetField(field)
+			return q, nil
+		case filter.DurationType:
+			q := bluge.NewNumericRangeQuery(0-math.MaxFloat64, float64(value.Value().(time.Duration).Milliseconds()))
 			q.SetField(field)
 			return q, nil
 		case filter.StringType:
@@ -136,6 +144,10 @@ func (j *BlugeQuery) condition(field string, op filter.CompOp, value filter.Valu
 			q := bluge.NewNumericRangeInclusiveQuery(value.Value().(float64), math.MaxFloat64, true, true)
 			q.SetField(field)
 			return q, nil
+		case filter.DurationType:
+			q := bluge.NewNumericRangeInclusiveQuery(float64(value.Value().(time.Duration).Milliseconds()), math.MaxFloat64, true, true)
+			q.SetField(field)
+			return q, nil
 		case filter.StringType:
 			// todo: how to handle dates? they don't have a special type so we would need to look
 			// at the mapping
@@ -153,6 +165,10 @@ func (j *BlugeQuery) condition(field string, op filter.CompOp, value filter.Valu
 			return q, nil
 		case filter.FloatType:
 			q := bluge.NewNumericRangeInclusiveQuery(0-math.MaxFloat64, value.Value().(float64), true, true)
+			q.SetField(field)
+			return q, nil
+		case filter.DurationType:
+			q := bluge.NewNumericRangeInclusiveQuery(0-math.MaxFloat64, float64(value.Value().(time.Duration).Milliseconds()), true, true)
 			q.SetField(field)
 			return q, nil
 		case filter.StringType:
@@ -196,6 +212,10 @@ func (j *BlugeQuery) eqFilter(field string, value filter.Value) (bluge.Query, er
 				return q, nil
 			case filter.FloatType:
 				q := bluge.NewNumericRangeInclusiveQuery(value.Value().(float64), value.Value().(float64), true, true)
+				q.SetField(field)
+				return q, nil
+			case filter.DurationType:
+				q := bluge.NewNumericRangeInclusiveQuery(float64(value.Value().(time.Duration).Milliseconds()), float64(value.Value().(time.Duration).Milliseconds()), true, true)
 				q.SetField(field)
 				return q, nil
 			default:

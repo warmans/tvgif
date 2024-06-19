@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/limits"
@@ -414,6 +415,8 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
+		spew.Dump(res)
+
 		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
 			name := fmt.Sprintf("[%s] %s", v.EpisodeID, v.Content)
@@ -614,10 +617,7 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, cu
 }
 
 func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayload) ([]discordgo.MessageComponent, error) {
-	dialogDuration, err := dialog.Duration()
-	if err != nil {
-		return nil, err
-	}
+	dialogDuration := dialog.Duration()
 	shiftButtons := []discordgo.MessageComponent{
 		discordgo.Button{
 			// Label is what the user will see on the button.
@@ -1014,8 +1014,8 @@ func (b *Bot) buildInteractionResponse(
 				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`",
 				bodyText,
 				dialog.ID,
-				dialog.StartTimestamp,
-				dialog.EndTimestamp,
+				time.Second*time.Duration(dialog.StartTimestamp),
+				time.Second*time.Duration(dialog.EndTimestamp),
 				shiftLabel,
 				extendLabel,
 				editLabel,
@@ -1054,14 +1054,9 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 		}
 	}
 
-	startTimestamp, err := time.ParseDuration(dialog.StartTimestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse start time: %w", err)
-	}
-	endTimestamp, err := time.ParseDuration(dialog.EndTimestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse start time: %w", err)
-	}
+	startTimestamp := time.Millisecond * time.Duration(dialog.StartTimestamp)
+	endTimestamp := time.Millisecond * time.Duration(dialog.EndTimestamp)
+
 	if customID.Shift != 0 {
 		startTimestamp += customID.Shift
 		endTimestamp += customID.Shift
@@ -1092,6 +1087,7 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 	var extension string
 	buff := &bytes.Buffer{}
 	var cacheHit bool
+	var err error
 	switch outputFileType {
 	case OutputWebm:
 		mimeType = "video/webm"

@@ -6,6 +6,7 @@ import (
 	"github.com/warmans/tvgif/pkg/filter"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Term struct {
@@ -131,6 +132,24 @@ func (p *parser) parseInner() ([]*Term, error) {
 			return nil, err
 		}
 		return p.expandIDCondition(strings.ToLower(mentionText.lexeme))
+	case tagTimestamp:
+		durationNumber, err := p.requireNext(tagInt)
+		if err != nil {
+			return nil, err
+		}
+		durationUnit, err := p.requireNext(tagWord, tagEOF)
+		if err != nil {
+			return nil, err
+		}
+		ts, err := time.ParseDuration(fmt.Sprintf("%s%s", durationNumber.lexeme, durationUnit.lexeme))
+		if err != nil {
+			return nil, err
+		}
+		return []*Term{{
+			Field: "start_timestamp",
+			Value: Duration(ts),
+			Op:    filter.CompOpGe,
+		}}, nil
 	default:
 		return nil, errors.Errorf("unexpected token '%s'", tok)
 	}

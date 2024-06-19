@@ -41,31 +41,31 @@ func PopulateIndex(logger *slog.Logger, metadataPath string, indexPath string) e
 func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogDocument) (bluge.Field, bool) {
 	switch t {
 	case mapping.FieldTypeKeyword:
-		return bluge.NewKeywordField(fieldName, d.GetNamedField(fieldName).(string)).StoreValue().Aggregatable(), true
+		return bluge.NewKeywordField(fieldName, d.GetNamedField(fieldName).(string)).StoreValue().Aggregatable().StoreValue(), true
 	case mapping.FieldTypeDate:
 		dateField := d.GetNamedField(fieldName).(*time.Time)
 		if dateField == nil {
 			return nil, false
 		}
-		return bluge.NewDateTimeField(fieldName, *dateField).Aggregatable(), true
+		return bluge.NewDateTimeField(fieldName, *dateField).Aggregatable().StoreValue(), true
 	case mapping.FieldTypeNumber:
 		switch typed := d.GetNamedField(fieldName).(type) {
 		case float32:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case float64:
-			return bluge.NewNumericField(fieldName, typed), true
+			return bluge.NewNumericField(fieldName, typed).StoreValue(), true
 		case int32:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case int64:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case int:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case int8:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case uint8:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		case int16:
-			return bluge.NewNumericField(fieldName, float64(typed)), true
+			return bluge.NewNumericField(fieldName, float64(typed)).StoreValue(), true
 		default:
 			panic("non-numeric type mapped as number")
 		}
@@ -74,7 +74,6 @@ func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogD
 		shingleAnalyzer := &analysis.Analyzer{
 			Tokenizer: tokenizer.NewUnicodeTokenizer(),
 			TokenFilters: []analysis.TokenFilter{
-				//token.NewLowerCaseFilter(),
 				token.NewNgramFilter(2, 16),
 			},
 		}
@@ -107,8 +106,8 @@ func documentsFromPath(filePath string) ([]searchModel.DialogDocument, error) {
 			Publication:    episode.Publication,
 			Series:         episode.Series,
 			Episode:        episode.Episode,
-			StartTimestamp: v.StartTimestamp.String(),
-			EndTimestamp:   v.EndTimestamp.String(),
+			StartTimestamp: v.StartTimestamp.Milliseconds(),
+			EndTimestamp:   v.EndTimestamp.Milliseconds(),
 			VideoFileName:  episode.VideoFile,
 			Content:        v.Content,
 		})

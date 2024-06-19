@@ -4,6 +4,7 @@ import (
 	"github.com/warmans/tvgif/pkg/filter"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestMustParse(t *testing.T) {
@@ -75,12 +76,20 @@ func TestMustParse(t *testing.T) {
 			},
 		},
 		{
+			name: "parse timestamp",
+			args: args{s: `+10m30s`},
+			want: []Term{
+				{Field: "start_timestamp", Value: Duration(time.Minute*10 + time.Second*30), Op: filter.CompOpGe},
+			},
+		},
+		{
 			name: "parse all",
-			args: args{s: `@steve ~xfm #s1 "man alive" karl`},
+			args: args{s: `@steve ~xfm #s1 +30m "man alive" karl`},
 			want: []Term{
 				{Field: "actor", Value: String("steve"), Op: filter.CompOpEq},
 				{Field: "publication", Value: String("xfm"), Op: filter.CompOpEq},
 				{Field: "series", Value: Int(1), Op: filter.CompOpEq},
+				{Field: "start_timestamp", Value: Duration(time.Minute * 30), Op: filter.CompOpGe},
 				{Field: "content", Value: String("man alive"), Op: filter.CompOpEq},
 				{Field: "content", Value: String("karl"), Op: filter.CompOpFuzzyLike},
 			},

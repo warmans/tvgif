@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/blugelabs/bluge"
 	search2 "github.com/blugelabs/bluge/search"
-	"github.com/blugelabs/bluge/search/aggregations"
 	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/filter/bluge_query"
 	"github.com/warmans/tvgif/pkg/search/model"
@@ -58,11 +57,7 @@ func (b *BlugeSearch) Search(ctx context.Context, f filter.Filter, page int32) (
 		return nil, err
 	}
 
-	agg := aggregations.NewTermsAggregation(search2.Field("actor"), 25)
-	agg.AddAggregation("transcript_id", aggregations.NewTermsAggregation(search2.Field("transcript_id"), 150))
-
 	req := bluge.NewTopNSearch(PageSize, query).SetFrom(PageSize * int(page))
-	req.AddAggregation("actor_count_over_time", agg)
 
 	dmi, err := b.index.Search(ctx, req)
 	if err != nil {
@@ -123,6 +118,7 @@ func scanDocument(match *search2.DocumentMatch) (*model.DialogDocument, error) {
 	cur := &model.DialogDocument{}
 	var innerErr error
 	err := match.VisitStoredFields(func(field string, value []byte) bool {
+
 		if field == "_id" {
 			parts := strings.Split(string(value), "-")
 			var err error
@@ -132,7 +128,7 @@ func scanDocument(match *search2.DocumentMatch) (*model.DialogDocument, error) {
 				return false
 			}
 		}
-		cur.SetNamedField(field, string(value))
+		cur.SetNamedField(field, value)
 		return true
 	})
 	if innerErr != nil {

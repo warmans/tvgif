@@ -1,6 +1,9 @@
 package filter
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type Value interface {
 	// Type returns the type for the value.
@@ -121,4 +124,26 @@ func (s FloatValue) Value() interface{} {
 
 func (s FloatValue) String() string {
 	return fmt.Sprint(float64(s))
+}
+
+func Duration(v time.Duration) DurationValue {
+	return DurationValue(v)
+}
+
+type DurationValue time.Duration
+
+func (s DurationValue) IsNull() bool {
+	return false
+}
+
+func (s DurationValue) Type() Type {
+	return DurationType
+}
+
+func (s DurationValue) Value() interface{} {
+	return time.Duration(s)
+}
+
+func (s DurationValue) String() string {
+	return time.Duration(s).String()
 }

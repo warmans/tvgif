@@ -69,6 +69,14 @@ func TestScan(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "scan timestamp",
+			args: args{
+				str: `+10m`,
+			},
+			want:    []token{{tag: tagTimestamp, lexeme: "+"}, {tag: tagInt, lexeme: "10"}, {tag: tagWord, lexeme: "m"}, {tag: tagEOF}},
+			wantErr: false,
+		},
+		{
 			name: "scan everything",
 			args: args{
 				str: `"man alive" @steve ~xfm #s1 foo`,

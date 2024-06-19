@@ -35,7 +35,6 @@ type Printer struct {
 }
 
 func (p *Printer) VisitCompFilter(filter *CompFilter) (Visitor, error) {
-
 	if _, err := fmt.Fprintf(p.w, "%s %s %s", filter.Field, filter.Op, filter.Value.String()); err != nil {
 		return nil, err
 	}

@@ -1,6 +1,9 @@
 package searchterms
 
-import "github.com/warmans/tvgif/pkg/filter"
+import (
+	"github.com/warmans/tvgif/pkg/filter"
+	"time"
+)
 
 func TermsToFilter(terms []Term) filter.Filter {
 	var fil filter.Filter
@@ -11,6 +14,8 @@ func TermsToFilter(terms []Term) filter.Filter {
 			val = filter.String(t.Value.Value().(string))
 		case IntType:
 			val = filter.Int(t.Value.Value().(int64))
+		case DurationType:
+			val = filter.Duration(t.Value.Value().(time.Duration))
 		}
 		if fil == nil {
 			fil = &filter.CompFilter{

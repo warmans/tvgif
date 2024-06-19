@@ -1,6 +1,9 @@
 package searchterms
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type Value interface {
 	// Type returns the type for the value.
@@ -45,4 +48,22 @@ func (s IntValue) Value() interface{} {
 
 func (s IntValue) String() string {
 	return fmt.Sprint(int64(s))
+}
+
+func Duration(ts time.Duration) DurationValue {
+	return DurationValue(ts)
+}
+
+type DurationValue time.Duration
+
+func (s DurationValue) Type() Type {
+	return DurationType
+}
+
+func (s DurationValue) Value() interface{} {
+	return time.Duration(s)
+}
+
+func (s DurationValue) String() string {
+	return time.Duration(s).String()
 }
