@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/limits"
@@ -414,8 +413,6 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.logger.Error("Failed to fetch autocomplete options", slog.String("err", err.Error()))
 			return
 		}
-
-		spew.Dump(res)
 
 		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
