@@ -9,6 +9,7 @@ import (
 
 type DialogDocument struct {
 	ID             string `json:"id"`
+	Pos            int32  `json:"pos"`
 	EpisodeID      string `json:"episode_id"`
 	Publication    string `json:"publication"`
 	Series         int32  `json:"series"`
@@ -26,6 +27,7 @@ func (d *DialogDocument) ShortEpisodeID() string {
 func (d *DialogDocument) FieldMapping() map[string]mapping.FieldType {
 	return map[string]mapping.FieldType{
 		"_id":             mapping.FieldTypeKeyword,
+		"pos":             mapping.FieldTypeNumber,
 		"episode_id":      mapping.FieldTypeKeyword,
 		"publication":     mapping.FieldTypeKeyword,
 		"series":          mapping.FieldTypeNumber,
@@ -45,6 +47,8 @@ func (d *DialogDocument) GetNamedField(name string) any {
 	switch name {
 	case "_id":
 		return d.ID
+	case "pos":
+		return d.Pos
 	case "episode_id":
 		return d.EpisodeID
 	case "publication":
@@ -69,8 +73,9 @@ func (d *DialogDocument) SetNamedField(name string, value any) {
 	switch name {
 	case "_id":
 		d.ID = string(value.([]byte))
+	case "pos":
+		d.Pos = int32(bytesToFloatOrZero(value))
 	case "episode_id":
-
 		d.EpisodeID = string(value.([]byte))
 	case "publication":
 		d.Publication = string(value.([]byte))

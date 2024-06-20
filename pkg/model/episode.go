@@ -7,10 +7,14 @@ import (
 )
 
 type Dialog struct {
-	Pos            int64         `json:"pos"`
-	StartTimestamp time.Duration `json:"start_timestamp"`
-	EndTimestamp   time.Duration `json:"end_timestamp"`
-	Content        string        `json:"content"`
+	Pos            int64         `json:"pos" db:"pos"`
+	StartTimestamp time.Duration `json:"start_timestamp" db:"start_timestamp"`
+	EndTimestamp   time.Duration `json:"end_timestamp" db:"end_timestamp"`
+	Content        string        `json:"content" db:"content"`
+}
+
+func (e *Dialog) ID(episodeID string) string {
+	return fmt.Sprintf("%s-%d", episodeID, e.Pos)
 }
 
 type Episode struct {

@@ -20,6 +20,7 @@ func NewImporterCommand(logger *slog.Logger) *cobra.Command {
 
 	cmd.AddCommand(NewImportSrtCommand())
 	cmd.AddCommand(PopulateBlugeIndex(logger))
+	cmd.AddCommand(RefreshDB(logger))
 
 	return cmd
 }

@@ -72,3 +72,12 @@ func ExtractSeriesAndEpisode(raw string) (int32, int32, error) {
 func FormatSeriesAndEpisode(series int, episode int) string {
 	return fmt.Sprintf("S%02dE%02d", series, episode)
 }
+
+func InStrings(s string, ss ...string) bool {
+	for _, v := range ss {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}

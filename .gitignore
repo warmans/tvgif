@@ -1,3 +1,4 @@
 *.private
 .idea
 .env
+var/*.sqlite3

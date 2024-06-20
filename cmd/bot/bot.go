@@ -10,6 +10,7 @@ import (
 	"github.com/warmans/tvgif/pkg/importer"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/search"
+	"github.com/warmans/tvgif/pkg/store"
 	"log"
 	"log/slog"
 	"os"
@@ -23,8 +24,9 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	var discordToken string
 	var botUsername string
 
-	var populateIndexOnStart bool
+	var refreshDataOnStart bool
 	var indexPath string
+	var dbCfg = &store.Config{}
 	var metadataPath string
 
 	cmd := &cobra.Command{
@@ -32,10 +34,15 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 		Short: "start the discord bot",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
+			logger.Info("Opening DB...", slog.String("dsn", dbCfg.DSN))
+			conn, err := store.NewConn(dbCfg)
+			if err != nil {
+				return err
+			}
 			if indexPath == "" {
 				return fmt.Errorf("no INDEX_PATH specified")
 			}
-			if populateIndexOnStart {
+			if refreshDataOnStart {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
 				}
@@ -45,6 +52,10 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				}
 				logger.Info("Creating Index...", slog.String("path", indexPath))
 				if err := importer.PopulateIndex(logger, metadataPath, indexPath); err != nil {
+					return err
+				}
+				logger.Info("Initialising DB...", slog.String("dsn", dbCfg.DSN))
+				if err := store.InitDB(logger, metadataPath, conn); err != nil {
 					return err
 				}
 			}
@@ -77,7 +88,15 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			}
 
 			logger.Info("Starting bot...")
-			bot, err := discord.NewBot(logger, session, search.NewBlugeSearch(reader), mediaCache, mediaPath, botUsername)
+			bot, err := discord.NewBot(
+				logger,
+				session,
+				search.NewBlugeSearch(reader),
+				mediaCache,
+				mediaPath,
+				botUsername,
+				store.NewSRTStore(conn.Db),
+			)
 			if err != nil {
 				return fmt.Errorf("failed to create bot: %w", err)
 			}
@@ -102,9 +121,11 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	flag.StringVarEnv(cmd.Flags(), &cachePath, "", "cache-path", "", "path to cache dir")
 	flag.StringVarEnv(cmd.Flags(), &botUsername, "", "bot-username", "tvgif", "bot username and differentiator, used to determine if a message belongs to the bot e.g. tvgif#213")
 
-	flag.BoolVarEnv(cmd.Flags(), &populateIndexOnStart, "", "populate-index", true, "automatically create indexes and metadata from the media dir")
+	flag.BoolVarEnv(cmd.Flags(), &refreshDataOnStart, "", "populate-index", true, "automatically create indexes and metadata from the media dir")
 	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")
 	flag.StringVarEnv(cmd.Flags(), &metadataPath, "", "metadata-path", "./var/metadata", "path to metadata files")
+
+	dbCfg.RegisterFlags(cmd.Flags(), "", "dialog")
 	flag.Parse()
 
 	return cmd
