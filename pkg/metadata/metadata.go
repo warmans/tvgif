@@ -29,8 +29,9 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 	}
 	defer func() {
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
-			panic("failed to unlock file")
+			panic("failed to unlock file: " + err.Error())
 		}
+		f.Close()
 	}()
 
 	manifest := &model.Manifest{
@@ -42,7 +43,6 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 			return err
 		}
 	}
-	defer f.Close()
 
 	if err := f.Truncate(0); err != nil {
 		return err
