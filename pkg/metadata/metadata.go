@@ -27,7 +27,11 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+			panic("failed to unlock file")
+		}
+	}()
 
 	manifest := &model.Manifest{
 		Episodes: map[string]*model.EpisodeMeta{},
