@@ -62,6 +62,17 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 }
 
 func CreateMetadataFromSRTs(logger *slog.Logger, srtDir string, metadataDir string) error {
+	_, err := os.Stat(metadataDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Info("Creating metadata dir...", slog.String("path", metadataDir))
+			if err = os.Mkdir(metadataDir, os.ModeDir); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
 	return WithManifest(metadataDir, func(manifest *model.Manifest) error {
 		dirEntries, err := os.ReadDir(srtDir)
 		if err != nil {

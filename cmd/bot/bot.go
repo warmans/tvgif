@@ -46,15 +46,15 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
 				}
-				logger.Info("Creating Metadata...", slog.String("path", metadataPath))
+				logger.Info("Updating Metadata...", slog.String("path", metadataPath))
 				if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
 					return err
 				}
-				logger.Info("Creating Index...", slog.String("path", indexPath))
+				logger.Info("Updating Index...", slog.String("path", indexPath))
 				if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
 					return err
 				}
-				logger.Info("Initialising DB...", slog.String("dsn", dbCfg.DSN))
+				logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
 				if err := store.InitDB(logger, metadataPath, conn); err != nil {
 					return err
 				}
