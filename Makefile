@@ -14,7 +14,7 @@ update-meta: build
 
 .PHONY: refresh
 refresh: update-meta
-	./bin/tvgif importer refresh-index
+	./bin/tvgif importer refresh-index && ./bin/tvgif importer refresh-db
 
 .PHONY: lint
 lint:

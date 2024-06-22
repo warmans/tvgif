@@ -6,6 +6,28 @@ import (
 	"time"
 )
 
+type EpisodeMeta struct {
+	SourceSRTName string `json:"source_srt_name"`
+	ImportedIndex bool   `json:"imported_index"`
+	ImportedDB    bool   `json:"imported_db"`
+}
+
+type Manifest struct {
+	SrtIndex map[string]string       `json:"srt_index"`
+	Episodes map[string]*EpisodeMeta `json:"episodes"`
+}
+
+func (m *Manifest) Add(metaFileName string, ep *EpisodeMeta) {
+	if m.Episodes == nil {
+		m.Episodes = make(map[string]*EpisodeMeta)
+	}
+	m.Episodes[metaFileName] = ep
+	if m.SrtIndex == nil {
+		m.SrtIndex = make(map[string]string)
+	}
+	m.SrtIndex[ep.SourceSRTName] = metaFileName
+}
+
 type Dialog struct {
 	Pos            int64         `json:"pos" db:"pos"`
 	StartTimestamp time.Duration `json:"start_timestamp" db:"start_timestamp"`

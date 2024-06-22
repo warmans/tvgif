@@ -13,9 +13,23 @@ func InitDB(logger *slog.Logger, metadataPath string, conn *Conn) error {
 	}
 	return conn.WithTx(func(tx *sqlx.Tx) error {
 		srtStore := NewSRTStore(tx)
-		return metadata.Process(metadataPath, func(ep model.Episode) error {
-			logger.Info("Processing episode...", slog.String("episode", ep.ID()))
-			return srtStore.ImportEpisode(ep)
+		return metadata.WithManifest(metadataPath, func(manifest *model.Manifest) error {
+			return metadata.Process(metadataPath, func(fileName string, ep model.Episode) error {
+				if meta, ok := manifest.Episodes[fileName]; ok {
+					if meta.ImportedDB {
+						return nil
+					}
+				} else {
+					logger.Warn("Manifest seems to be out of date, skipping unknown file...", slog.String("file", fileName))
+					return nil
+				}
+				logger.Info("Importing file to DB...", slog.String("file", fileName))
+				if err := srtStore.ImportEpisode(ep); err != nil {
+					return err
+				}
+				manifest.Episodes[fileName].ImportedDB = true
+				return nil
+			})
 		})
 	})
 }

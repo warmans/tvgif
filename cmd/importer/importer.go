@@ -18,7 +18,7 @@ func NewImporterCommand(logger *slog.Logger) *cobra.Command {
 
 	cmd.Flags().StringVar(&metadataPath, "o", "./var/metadata", "output metadata to this path")
 
-	cmd.AddCommand(NewImportSrtCommand())
+	cmd.AddCommand(NewImportSrtCommand(logger))
 	cmd.AddCommand(PopulateBlugeIndex(logger))
 	cmd.AddCommand(RefreshDB(logger))
 

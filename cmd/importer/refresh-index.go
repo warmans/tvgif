@@ -3,7 +3,7 @@ package importer
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/warmans/tvgif/pkg/importer"
+	"github.com/warmans/tvgif/pkg/search"
 	"log/slog"
 )
 
@@ -18,7 +18,7 @@ func PopulateBlugeIndex(logger *slog.Logger) *cobra.Command {
 
 			fmt.Printf("Using index %s...\n", indexPath)
 
-			return importer.PopulateIndex(logger, metadataPath, indexPath)
+			return search.PopulateIndex(logger, metadataPath, indexPath)
 		},
 	}
 

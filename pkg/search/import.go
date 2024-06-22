@@ -1,4 +1,4 @@
-package importer
+package search
 
 import (
 	"encoding/json"
@@ -7,35 +7,39 @@ import (
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/blugelabs/bluge/analysis/token"
 	"github.com/blugelabs/bluge/analysis/tokenizer"
+	"github.com/warmans/tvgif/pkg/metadata"
 	"github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/search/mapping"
 	searchModel "github.com/warmans/tvgif/pkg/search/model"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path"
-	"strings"
 	"time"
 )
 
 func PopulateIndex(logger *slog.Logger, metadataPath string, indexPath string) error {
 
-	logger.Info("Removing old index...")
-	if indexPath == "/" {
-		panic("refusing to rm /*")
-	}
-	if err := exec.Command("rm", "-rf", indexPath).Run(); err != nil {
-		return fmt.Errorf("failed to remove index: %w", err)
-	}
-
-	config := bluge.DefaultConfig(indexPath)
-
-	index, err := bluge.OpenWriter(config)
+	index, err := bluge.OpenWriter(bluge.DefaultConfig(indexPath))
 	if err != nil {
 		return err
 	}
-	logger.Info("Populating index...", slog.String("path", metadataPath))
-	return populateIndex(metadataPath, index, logger)
+	defer index.Close()
+
+	return metadata.WithManifest(metadataPath, func(manifest *model.Manifest) error {
+		logger.Info("Populating index...", slog.String("path", metadataPath))
+
+		for metaFileName, meta := range manifest.Episodes {
+			if meta.ImportedIndex {
+				continue
+			}
+			logger.Info("Indexing...", slog.String("name", metaFileName))
+			if err := populateIndex(path.Join(metadataPath, metaFileName), index); err != nil {
+				return err
+			}
+			manifest.Episodes[metaFileName].ImportedIndex = true
+		}
+		return nil
+	})
 }
 
 func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogDocument) (bluge.Field, bool) {
@@ -83,7 +87,7 @@ func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogD
 	return bluge.NewTextField(fieldName, fmt.Sprintf("%v", d.GetNamedField(fieldName))).SearchTermPositions().StoreValue(), true
 }
 
-func documentsFromPath(filePath string) ([]searchModel.DialogDocument, error) {
+func documentsFromMetaFile(filePath string) ([]searchModel.DialogDocument, error) {
 
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -116,36 +120,23 @@ func documentsFromPath(filePath string) ([]searchModel.DialogDocument, error) {
 	return docs, nil
 }
 
-func populateIndex(inputDir string, writer *bluge.Writer, logger *slog.Logger) error {
-
-	dirEntries, err := os.ReadDir(inputDir)
+func populateIndex(metaFilePath string, writer *bluge.Writer) error {
+	docs, err := documentsFromMetaFile(metaFilePath)
 	if err != nil {
 		return err
 	}
-	for _, dirEntry := range dirEntries {
-		if dirEntry.IsDir() || !strings.HasSuffix(dirEntry.Name(), ".json") {
-			continue
-		}
-
-		logger.Info("Processing file...", slog.String("name", dirEntry.Name()))
-		docs, err := documentsFromPath(path.Join(inputDir, dirEntry.Name()))
-		if err != nil {
-			return err
-		}
-
-		batch := bluge.NewBatch()
-		for _, d := range docs {
-			doc := bluge.NewDocument(d.ID)
-			for k, t := range d.FieldMapping() {
-				if mapped, ok := getMappedField(k, t, d); ok {
-					doc.AddField(mapped)
-				}
+	batch := bluge.NewBatch()
+	for _, d := range docs {
+		doc := bluge.NewDocument(d.ID)
+		for k, t := range d.FieldMapping() {
+			if mapped, ok := getMappedField(k, t, d); ok {
+				doc.AddField(mapped)
 			}
-			batch.Insert(doc)
 		}
-		if err := writer.Batch(batch); err != nil {
-			return err
-		}
+		batch.Insert(doc)
+	}
+	if err := writer.Batch(batch); err != nil {
+		return err
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package importer
+package metadata
 
 import (
 	"encoding/json"
@@ -17,36 +17,28 @@ var filePatternRegex = regexp.MustCompile(`(?P<publication>[a-zA-Z0-9]+)-S(?P<se
 
 const videoExtension = ".webm"
 
-func CreateMetadataFromSRTs(srtPath string, metadataPath string) error {
+func CreateMetadataFromSRT(srtPath, metadataDir string) (string, error) {
 
-	dirEntries, err := os.ReadDir(srtPath)
+	srtName := path.Base(srtPath)
+
+	meta := &model.Episode{
+		SRTFile:   srtName,
+		VideoFile: fmt.Sprintf("%s.%s", strings.TrimSuffix(path.Base(srtName), ".srt"), strings.TrimPrefix(videoExtension, ".")),
+	}
+	var err error
+	meta.Publication, meta.Series, meta.Episode, err = parseFileName(filePatternRegex, srtName)
 	if err != nil {
-		return fmt.Errorf("failed to read dir %s: %w", srtPath, err)
+		return "", err
 	}
-	for _, entry := range dirEntries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".srt") {
-			continue
-		}
-
-		meta := &model.Episode{
-			SRTFile:   entry.Name(),
-			VideoFile: fmt.Sprintf("%s.%s", strings.TrimSuffix(path.Base(entry.Name()), ".srt"), strings.TrimPrefix(videoExtension, ".")),
-		}
-		var err error
-		meta.Publication, meta.Series, meta.Episode, err = parseFileName(filePatternRegex, entry.Name())
-		if err != nil {
-			return err
-		}
-		meta.Dialog, err = parseSRT(path.Join(srtPath, entry.Name()))
-		if err != nil {
-			return fmt.Errorf("failed to process SRT %s: %w", entry.Name(), err)
-		}
-		if err := writeMetadata(path.Join(metadataPath, fmt.Sprintf("%s.json", meta.ID())), meta); err != nil {
-			return fmt.Errorf("failed to write metadata: %w", err)
-		}
+	meta.Dialog, err = parseSRT(srtPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to process SRT %s: %w", srtName, err)
 	}
-
-	return nil
+	fileName := fmt.Sprintf("%s.json", meta.ID())
+	if err := writeMetadata(path.Join(metadataDir, fileName), meta); err != nil {
+		return "", fmt.Errorf("failed to write metadata: %w", err)
+	}
+	return fileName, nil
 }
 
 func writeMetadata(path string, e *model.Episode) error {

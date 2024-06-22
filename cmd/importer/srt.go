@@ -3,10 +3,11 @@ package importer
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/warmans/tvgif/pkg/importer"
+	"github.com/warmans/tvgif/pkg/metadata"
+	"log/slog"
 )
 
-func NewImportSrtCommand() *cobra.Command {
+func NewImportSrtCommand(logger *slog.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "srt",
 		Short: "import all .srt files from the given directory",
@@ -16,7 +17,7 @@ func NewImportSrtCommand() *cobra.Command {
 				return fmt.Errorf("expecting exactly one argument: the directory to import")
 			}
 			mediaPath := args[0]
-			return importer.CreateMetadataFromSRTs(mediaPath, metadataPath)
+			return metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath)
 		},
 	}
 	return cmd

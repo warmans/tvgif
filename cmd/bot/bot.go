@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/discord"
 	"github.com/warmans/tvgif/pkg/flag"
-	"github.com/warmans/tvgif/pkg/importer"
 	"github.com/warmans/tvgif/pkg/mediacache"
+	"github.com/warmans/tvgif/pkg/metadata"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/store"
 	"log"
@@ -24,7 +24,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	var discordToken string
 	var botUsername string
 
-	var refreshDataOnStart bool
+	var updateDataOnStartup bool
 	var indexPath string
 	var dbCfg = &store.Config{}
 	var metadataPath string
@@ -42,16 +42,16 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			if indexPath == "" {
 				return fmt.Errorf("no INDEX_PATH specified")
 			}
-			if refreshDataOnStart {
+			if updateDataOnStartup {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
 				}
 				logger.Info("Creating Metadata...", slog.String("path", metadataPath))
-				if err := importer.CreateMetadataFromSRTs(mediaPath, metadataPath); err != nil {
+				if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
 					return err
 				}
 				logger.Info("Creating Index...", slog.String("path", indexPath))
-				if err := importer.PopulateIndex(logger, metadataPath, indexPath); err != nil {
+				if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
 					return err
 				}
 				logger.Info("Initialising DB...", slog.String("dsn", dbCfg.DSN))
@@ -121,7 +121,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	flag.StringVarEnv(cmd.Flags(), &cachePath, "", "cache-path", "", "path to cache dir")
 	flag.StringVarEnv(cmd.Flags(), &botUsername, "", "bot-username", "tvgif", "bot username and differentiator, used to determine if a message belongs to the bot e.g. tvgif#213")
 
-	flag.BoolVarEnv(cmd.Flags(), &refreshDataOnStart, "", "populate-index", true, "automatically create indexes and metadata from the media dir")
+	flag.BoolVarEnv(cmd.Flags(), &updateDataOnStartup, "", "update-data-on-startup", true, "automatically create indexes and metadata from the media dir when bot starts")
 	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")
 	flag.StringVarEnv(cmd.Flags(), &metadataPath, "", "metadata-path", "./var/metadata", "path to metadata files")
 

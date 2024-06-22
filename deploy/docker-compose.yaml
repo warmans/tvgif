@@ -6,6 +6,7 @@ services:
       # Remember to chown cache dir on host to nobody:nogroup so container can write to it
       - ${PWD}/media:/media
       - ${PWD}/cache:/cache
+      - ${PWD}/var:/opt/tvgif/var
     environment:
       DISCORD_TOKEN: changeme
       MEDIA_PATH: /media
