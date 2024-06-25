@@ -29,9 +29,10 @@ func NewToolsCommand(logger *slog.Logger) *cobra.Command {
 	return cmd
 }
 
-var nameWithShortSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)[eE](?P<episode>\d+).*$`)
+var nameWithShortSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)(\s+)?[eE](?P<episode>\d+).*$`)
 var nameWithLongSeasonAndEpisode = regexp.MustCompile(`^.*[sS]eason (?P<series>\d+) [eE]pisode (?P<episode>\d+).*$`)
 var nameWithSplitSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)\.[eE](?P<episode>\d+).*$`)
+var shortSeasonAndEpisode = regexp.MustCompile(`^.*(?P<series>\d+)x(?P<episode>\d+).*$`)
 
 func NewFixNameCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -45,7 +46,7 @@ func NewFixNameCommand() *cobra.Command {
 			}
 
 			strName := strings.TrimSpace(string(rawName))
-			for _, re := range []*regexp.Regexp{nameWithShortSeasonAndEpisode, nameWithLongSeasonAndEpisode, nameWithSplitSeasonAndEpisode} {
+			for _, re := range []*regexp.Regexp{nameWithShortSeasonAndEpisode, nameWithLongSeasonAndEpisode, nameWithSplitSeasonAndEpisode, shortSeasonAndEpisode} {
 				if re.MatchString(strName) {
 					series, episode, err := util.ParseSeriesAndEpisodeFromFileName(re, strName)
 					if err != nil {
