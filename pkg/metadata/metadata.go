@@ -18,7 +18,6 @@ const ManifestName = ".manifest.json"
 
 func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) error {
 	manifestPath := path.Join(metadataDir, ManifestName)
-	fmt.Println("open file...")
 	f, err := os.OpenFile(manifestPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		if errors.Is(err, syscall.EAGAIN) {
@@ -26,12 +25,10 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 		}
 		return fmt.Errorf("failed to open manifest: %w", err)
 	}
-	fmt.Println("awaiting lock...")
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		return err
 	}
 	defer func() {
-		fmt.Println("awaiting unlock...")
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
 			panic("failed to unlock file: " + err.Error())
 		}
@@ -43,14 +40,12 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 		Episodes: map[string]*model.EpisodeMeta{},
 		SrtIndex: map[string]string{},
 	}
-	fmt.Println("decoding file...")
 	if err := json.NewDecoder(f).Decode(manifest); err != nil {
 		if !errors.Is(err, io.EOF) {
 			return err
 		}
 	}
 
-	fmt.Println("truncate...")
 	if err := f.Truncate(0); err != nil {
 		return err
 	}

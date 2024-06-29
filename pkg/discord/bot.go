@@ -625,6 +625,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 	}
 
 	dialogDuration := dialog.Duration()
+	//todo: need the total duration to avoid shifting past the end of the webm
 	shiftButtons := []discordgo.MessageComponent{
 		discordgo.Button{
 			Label: "Shift 5s",
@@ -718,7 +719,6 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 		})
 	}
 	trimButtons := []discordgo.MessageComponent{}
-	//todo: need to check the total duration of the media to avoid it overflowing
 	if (dialogDuration+customID.ExtendOrTrim)-(time.Second/2) > 0 {
 		trimButtons = append(trimButtons, discordgo.Button{
 			Label: "Trim 0.5s",
