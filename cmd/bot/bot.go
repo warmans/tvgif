@@ -46,17 +46,28 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
 				}
-				logger.Info("Updating Metadata...", slog.String("path", metadataPath))
-				if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
-					logger.Error("failed to update metadata", slog.String("err", err.Error()))
+				updateFn := func() {
+					logger.Info("Updating Metadata...", slog.String("path", metadataPath))
+					if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
+						logger.Error("failed to update metadata", slog.String("err", err.Error()))
+					}
+					logger.Info("Updating Index...", slog.String("path", indexPath))
+					if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
+						logger.Error("failed to update index", slog.String("err", err.Error()))
+					}
+					logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
+					if err := store.InitDB(logger, metadataPath, conn); err != nil {
+						logger.Error("failed to update db", slog.String("err", err.Error()))
+					}
 				}
-				logger.Info("Updating Index...", slog.String("path", indexPath))
-				if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
-					logger.Error("failed to update index", slog.String("err", err.Error()))
-				}
-				logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
-				if err := store.InitDB(logger, metadataPath, conn); err != nil {
-					logger.Error("failed to update db", slog.String("err", err.Error()))
+				if _, err := os.Stat(indexPath); err != nil {
+					logger.Info("Index exists, performing async update")
+					go updateFn()
+				} else {
+					// it's not possible to open the index if it hasn't been created.
+					// So if there is no index the first import must happen before the bot starts.
+					logger.Info("Index does not exist, performing sync update")
+					updateFn()
 				}
 			}
 
