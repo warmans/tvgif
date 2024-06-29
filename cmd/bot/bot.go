@@ -46,20 +46,18 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
 				}
-				go func() {
-					logger.Info("Updating Metadata...", slog.String("path", metadataPath))
-					if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
-						logger.Error("failed to update metadata", slog.String("err", err.Error()))
-					}
-					logger.Info("Updating Index...", slog.String("path", indexPath))
-					if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
-						logger.Error("failed to update index", slog.String("err", err.Error()))
-					}
-					logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
-					if err := store.InitDB(logger, metadataPath, conn); err != nil {
-						logger.Error("failed to update db", slog.String("err", err.Error()))
-					}
-				}()
+				logger.Info("Updating Metadata...", slog.String("path", metadataPath))
+				if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
+					logger.Error("failed to update metadata", slog.String("err", err.Error()))
+				}
+				logger.Info("Updating Index...", slog.String("path", indexPath))
+				if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
+					logger.Error("failed to update index", slog.String("err", err.Error()))
+				}
+				logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
+				if err := store.InitDB(logger, metadataPath, conn); err != nil {
+					logger.Error("failed to update db", slog.String("err", err.Error()))
+				}
 			}
 
 			reader, err := bluge.OpenReader(bluge.DefaultConfig(indexPath))
