@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"github.com/warmans/tvgif/pkg/util"
+	"sync"
 	"time"
 )
 
@@ -15,9 +16,13 @@ type EpisodeMeta struct {
 type Manifest struct {
 	SrtIndex map[string]string       `json:"srt_index"`
 	Episodes map[string]*EpisodeMeta `json:"episodes"`
+
+	lock sync.RWMutex
 }
 
 func (m *Manifest) Add(metaFileName string, ep *EpisodeMeta) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	if m.Episodes == nil {
 		m.Episodes = make(map[string]*EpisodeMeta)
 	}
@@ -26,6 +31,13 @@ func (m *Manifest) Add(metaFileName string, ep *EpisodeMeta) {
 		m.SrtIndex = make(map[string]string)
 	}
 	m.SrtIndex[ep.SourceSRTName] = metaFileName
+}
+
+func (m *Manifest) SrtExists(srtName string) bool {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	_, ok := m.SrtIndex[srtName]
+	return ok
 }
 
 type Dialog struct {

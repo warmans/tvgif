@@ -134,7 +134,7 @@ func scanTimestamps(line string) (time.Duration, time.Duration, error) {
 }
 
 func parseTime(input string) (time.Duration, error) {
-	regex := regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3})`)
+	regex := regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d+)`)
 	matches := regex.FindStringSubmatch(input)
 
 	if len(matches) < 4 {

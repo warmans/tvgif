@@ -8,9 +8,26 @@ install.golangci:
 build:
 	go build -o ./bin/tvgif
 
+.PHONY: validate-srts
+validate-srts: build
+ifndef MEDIA_PATH
+	$(error "MEDIA_PATH was not defined in environment")
+endif
+	./bin/tvgif importer validate-srt $(MEDIA_PATH)
+
+.PHONY: recreate-meta
+recreate-meta: build
+ifndef MEDIA_PATH
+	$(error "MEDIA_PATH was not defined in environment")
+endif
+	./bin/tvgif importer srt --clean=true $(MEDIA_PATH)
+
 .PHONY: update-meta
 update-meta: build
-	./bin/tvgif importer srt $(MEDIA_PATH)
+ifndef MEDIA_PATH
+	$(error "MEDIA_PATH was not defined in environment")
+endif
+	./bin/tvgif importer srt --clean=false $(MEDIA_PATH)
 
 .PHONY: refresh
 refresh: update-meta
