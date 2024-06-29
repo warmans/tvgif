@@ -11,13 +11,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var filePatternRegex = regexp.MustCompile(`(?P<publication>[a-zA-Z0-9]+)-S(?P<series>\d+)E(?P<episode>\d+)\.srt`)
 
 const videoExtension = ".webm"
 
-func CreateMetadataFromSRT(srtPath, metadataDir string) (string, error) {
+func CreateMetadataFromSRT(srtPath, metadataDir string) (string, time.Time, error) {
 
 	srtName := path.Base(srtPath)
 
@@ -28,17 +29,18 @@ func CreateMetadataFromSRT(srtPath, metadataDir string) (string, error) {
 	var err error
 	meta.Publication, meta.Series, meta.Episode, err = parseFileName(filePatternRegex, srtName)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	meta.Dialog, err = parseSRT(srtPath)
+	var modTime time.Time
+	meta.Dialog, modTime, err = parseSRT(srtPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to process SRT %s: %w", srtName, err)
+		return "", time.Time{}, fmt.Errorf("failed to process SRT %s: %w", srtName, err)
 	}
 	fileName := fmt.Sprintf("%s.json", meta.ID())
 	if err := writeMetadata(path.Join(metadataDir, fileName), meta); err != nil {
-		return "", fmt.Errorf("failed to write metadata: %w", err)
+		return "", time.Time{}, fmt.Errorf("failed to write metadata: %w", err)
 	}
-	return fileName, nil
+	return fileName, modTime, nil
 }
 
 func writeMetadata(path string, e *model.Episode) error {
@@ -94,11 +96,20 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	return publication, int32(seriesInt), int32(episodeInt), nil
 }
 
-func parseSRT(filePath string) ([]model.Dialog, error) {
+func parseSRT(filePath string) ([]model.Dialog, time.Time, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open srt file %s: %w", filePath, err)
+		return nil, time.Time{}, fmt.Errorf("failed to open srt file %s: %w", filePath, err)
 	}
 	defer f.Close()
-	return srt.Read(f, true, limits.MaxGifDuration)
+
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	dialog, err := srt.Read(f, true, limits.MaxGifDuration)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	return dialog, fileInfo.ModTime(), nil
 }

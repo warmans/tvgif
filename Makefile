@@ -27,11 +27,17 @@ update-meta: build
 ifndef MEDIA_PATH
 	$(error "MEDIA_PATH was not defined in environment")
 endif
-	./bin/tvgif importer srt --clean=false $(MEDIA_PATH)
+	./bin/tvgif importer srt $(MEDIA_PATH)
 
 .PHONY: refresh
 refresh: update-meta
 	./bin/tvgif importer refresh-index && ./bin/tvgif importer refresh-db
+
+.PHONY: clean
+clean:
+	rm -rf ./var/index/*
+	rm -rf ./var/dialog.sqlite3
+	rm -rf ./var/metadata/*.json ./var/metadata/.manifest.json
 
 .PHONY: lint
 lint:

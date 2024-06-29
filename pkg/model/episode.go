@@ -8,9 +8,10 @@ import (
 )
 
 type EpisodeMeta struct {
-	SourceSRTName string `json:"source_srt_name"`
-	ImportedIndex bool   `json:"imported_index"`
-	ImportedDB    bool   `json:"imported_db"`
+	SourceSRTName    string    `json:"source_srt_name"`
+	SourceSRTModTime time.Time `json:"source_srt_mod_time"`
+	ImportedIndex    bool      `json:"imported_index"`
+	ImportedDB       bool      `json:"imported_db"`
 }
 
 type Manifest struct {
@@ -33,11 +34,14 @@ func (m *Manifest) Add(metaFileName string, ep *EpisodeMeta) {
 	m.SrtIndex[ep.SourceSRTName] = metaFileName
 }
 
-func (m *Manifest) SrtExists(srtName string) bool {
+func (m *Manifest) IsSrtProcessed(srtName string, modTime time.Time) bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
-	_, ok := m.SrtIndex[srtName]
-	return ok
+	metaName, ok := m.SrtIndex[srtName]
+	if !ok {
+		return false
+	}
+	return m.Episodes[metaName].SourceSRTModTime.Equal(modTime)
 }
 
 type Dialog struct {
@@ -52,12 +56,13 @@ func (e *Dialog) ID(episodeID string) string {
 }
 
 type Episode struct {
-	SRTFile     string   `json:"srt_file"`
-	VideoFile   string   `json:"video_file"`
-	Publication string   `json:"publication"`
-	Series      int32    `json:"season"`
-	Episode     int32    `json:"episode"`
-	Dialog      []Dialog `json:"dialog"`
+	SRTFile     string    `json:"srt_file"`
+	SRTModTime  time.Time `json:"srt_mod_time"`
+	VideoFile   string    `json:"video_file"`
+	Publication string    `json:"publication"`
+	Series      int32     `json:"season"`
+	Episode     int32     `json:"episode"`
+	Dialog      []Dialog  `json:"dialog"`
 }
 
 func (e *Episode) ID() string {

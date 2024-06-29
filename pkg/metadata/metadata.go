@@ -32,7 +32,6 @@ func WithManifest(metadataDir string, fn func(manifest *model.Manifest) error) e
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
 			panic("failed to unlock file: " + err.Error())
 		}
-		fmt.Println("awaiting close...")
 		f.Close()
 	}()
 
@@ -93,8 +92,12 @@ func CreateMetadataFromSRTs(logger *slog.Logger, srtDir string, metadataDir stri
 			if dirEntry.IsDir() || !strings.HasSuffix(dirEntry.Name(), ".srt") {
 				continue
 			}
-			if manifest.SrtExists(dirEntry.Name()) {
-				entryLogger.Debug("Meta exists, skipping.")
+			info, err := dirEntry.Info()
+			if err != nil {
+				return err
+			}
+			if manifest.IsSrtProcessed(dirEntry.Name(), info.ModTime()) {
+				entryLogger.Debug("SRT was already processed, skipping.")
 				continue
 			}
 
@@ -106,13 +109,14 @@ func CreateMetadataFromSRTs(logger *slog.Logger, srtDir string, metadataDir stri
 				}()
 				srtPath := path.Join(srtDir, dirEntry.Name())
 				logger.Info("Create metadata...", slog.String("srt", srtPath))
-				fileName, err := CreateMetadataFromSRT(srtPath, metadataDir)
+				fileName, modTime, err := CreateMetadataFromSRT(srtPath, metadataDir)
 				if err != nil {
 					logger.Error("Invalid SRT, skipping.", slog.String("err", err.Error()), slog.String("srt", srtPath))
 					return
 				}
 				manifest.Add(fileName, &model.EpisodeMeta{
-					SourceSRTName: dirEntry.Name(),
+					SourceSRTName:    dirEntry.Name(),
+					SourceSRTModTime: modTime,
 				})
 			}()
 			work <- struct{}{}

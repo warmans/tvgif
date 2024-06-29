@@ -787,47 +787,46 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 		})
 	}
 
-	actions := []discordgo.MessageComponent{
-		discordgo.ActionsRow{
-			Components: shiftButtons,
-		},
-		discordgo.ActionsRow{
-			Components: extendButtons,
-		},
-		discordgo.ActionsRow{
-			Components: trimButtons,
-		},
-		discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				discordgo.Button{
-					// Label is what the user will see on the button.
-					Label: "Post GIF",
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "✅",
-					},
-					// Style provides coloring of the button. There are not so many styles tho.
-					Style: discordgo.PrimaryButton,
-					// Disabled allows bot to disable some buttons for users.
-					Disabled: false,
-					// CustomID is a thing telling Discord which data to send when this button will be pressed.
-					CustomID: encodeCustomID(ActionConfirmPostGif, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+	actions := []discordgo.MessageComponent{}
+	if len(shiftButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: shiftButtons})
+	}
+	if len(extendButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: extendButtons})
+	}
+	if len(trimButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: trimButtons})
+	}
+	actions = append(actions, discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.Button{
+				// Label is what the user will see on the button.
+				Label: "Post GIF",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "✅",
 				},
-				discordgo.Button{
-					// Label is what the user will see on the button.
-					Label: "Post GIF with Custom Text",
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "✅",
-					},
-					// Style provides coloring of the button. There are not so many styles tho.
-					Style: discordgo.PrimaryButton,
-					// Disabled allows bot to disable some buttons for users.
-					Disabled: false,
-					// CustomID is a thing telling Discord which data to send when this button will be pressed.
-					CustomID: encodeCustomID(ActionOpenCustomTextModal, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+				// Style provides coloring of the button. There are not so many styles tho.
+				Style: discordgo.PrimaryButton,
+				// Disabled allows bot to disable some buttons for users.
+				Disabled: false,
+				// CustomID is a thing telling Discord which data to send when this button will be pressed.
+				CustomID: encodeCustomID(ActionConfirmPostGif, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+			},
+			discordgo.Button{
+				// Label is what the user will see on the button.
+				Label: "Post GIF with Custom Text",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "✅",
 				},
+				// Style provides coloring of the button. There are not so many styles tho.
+				Style: discordgo.PrimaryButton,
+				// Disabled allows bot to disable some buttons for users.
+				Disabled: false,
+				// CustomID is a thing telling Discord which data to send when this button will be pressed.
+				CustomID: encodeCustomID(ActionOpenCustomTextModal, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
 			},
 		},
-	}
+	})
 
 	if len(navigateButtons) > 0 {
 		actions = append([]discordgo.MessageComponent{discordgo.ActionsRow{Components: navigateButtons}}, actions...)
