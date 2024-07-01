@@ -60,7 +60,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 						logger.Error("failed to update db", slog.String("err", err.Error()))
 					}
 				}
-				if _, err := os.Stat(indexPath); err != nil {
+				if _, err := os.Stat(indexPath); err == nil {
 					logger.Info("Index exists, performing async update")
 					go updateFn()
 				} else {
