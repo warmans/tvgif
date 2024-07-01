@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/blugelabs/bluge"
 	"github.com/bwmarrin/discordgo"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/discord"
 	"github.com/warmans/tvgif/pkg/flag"
@@ -64,10 +65,14 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 					logger.Info("Index exists, performing async update")
 					go updateFn()
 				} else {
-					// it's not possible to open the index if it hasn't been created.
-					// So if there is no index the first import must happen before the bot starts.
-					logger.Info("Index does not exist, performing sync update")
-					updateFn()
+					if errors.Is(err, os.ErrNotExist) {
+						// it's not possible to open the index if it hasn't been created.
+						// So if there is no index the first import must happen before the bot starts.
+						logger.Info("Index does not exist, performing sync update")
+						updateFn()
+					} else {
+						logger.Error("failed to stat index path", slog.String("err", err.Error()))
+					}
 				}
 			}
 
