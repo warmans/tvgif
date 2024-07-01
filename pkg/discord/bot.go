@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
-	"github.com/warmans/tvgif/pkg/filter"
 	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/mediacache"
+	model2 "github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/search"
-	"github.com/warmans/tvgif/pkg/search/model"
 	"github.com/warmans/tvgif/pkg/searchterms"
 	"github.com/warmans/tvgif/pkg/store"
 	"github.com/warmans/tvgif/pkg/util"
@@ -49,9 +49,6 @@ const (
 	OutputWebm = OutputFileType("webm")
 )
 
-var punctuation = regexp.MustCompile(`[^a-zA-Z0-9\s]+`)
-var spaces = regexp.MustCompile(`[\s]{2,}`)
-var metaWhitespace = regexp.MustCompile(`[\n\r\t]+`)
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
 
 var rendersInProgress = map[string]string{}
@@ -72,7 +69,7 @@ func resolveResponseOptions(opts ...responseOption) *responseOptions {
 
 type responseOptions struct {
 	username       string
-	customText     *string
+	customText     []string
 	outputFileType OutputFileType
 	placeholder    bool
 }
@@ -85,7 +82,7 @@ func withUsername(username string) responseOption {
 	}
 }
 
-func withCustomText(customText *string) responseOption {
+func withCustomText(customText []string) responseOption {
 	return func(options *responseOptions) {
 		options.customText = customText
 	}
@@ -168,19 +165,6 @@ func NewBot(
 						Type:         discordgo.ApplicationCommandOptionString,
 						Required:     true,
 						Autocomplete: true,
-					},
-					{
-						Type:              discordgo.ApplicationCommandOptionString,
-						Name:              "publication",
-						NameLocalizations: nil,
-						Description:       "Filter by publication",
-						Required:          false,
-						Autocomplete:      false,
-						Choices:           publicationChoices,
-						MinValue:          nil,
-						MaxValue:          0,
-						MinLength:         nil,
-						MaxLength:         0,
 					},
 				},
 			},
@@ -369,13 +353,22 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.respondError(s, i, fmt.Errorf("invalid selection"))
 			return
 		}
-		res, err := b.searcher.Get(context.Background(), selection)
+		dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 		if err != nil {
-			b.logger.Error("failed to fetch dialog", slog.String("err", err.Error()))
-			b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
+			b.respondError(
+				s,
+				i,
+				fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+				slog.String("err", err.Error()),
+				slog.String("custom_id", customID.String()),
+			)
 			return
 		}
-		if err := b.createGifPreview(s, i, *res, username, customID); err != nil {
+		if len(dialog) == 0 {
+			b.respondError(s, i, fmt.Errorf("no dialog was selected"), slog.String("custom_id", customID.String()))
+			return
+		}
+		if err := b.createGifPreview(s, i, dialog, username, customID); err != nil {
 			b.logger.Error("Failed to begin video response", slog.String("err", err.Error()))
 		}
 		return
@@ -383,11 +376,6 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		data := i.ApplicationCommandData()
 
 		rawTerms := strings.TrimSpace(data.Options[0].StringValue())
-
-		publication := ""
-		if len(data.Options) > 1 {
-			publication = strings.TrimSpace(data.Options[1].StringValue())
-		}
 
 		terms, err := searchterms.Parse(rawTerms)
 		if err != nil {
@@ -407,9 +395,6 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 
 		f := searchterms.TermsToFilter(terms)
-		if publication != "" {
-			f = filter.And(filter.Eq("publication", filter.String(publication)), f)
-		}
 		res, err := b.searcher.Search(
 			context.Background(),
 			f,
@@ -423,9 +408,6 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
 			name := fmt.Sprintf("[%s] %s", v.EpisodeID, v.Content)
-			if publication != "" {
-				name = fmt.Sprintf("[%s] %s", v.ShortEpisodeID(), v.Content)
-			}
 			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
 				Name:  util.TrimToN(name, 100),
 				Value: v.ID,
@@ -457,14 +439,23 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 
-	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
+	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
-		b.logger.Error("failed to fetch dialog", slog.String("err", err.Error()), slog.String("id", customIDPayload))
-		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
+		b.respondError(
+			s,
+			i,
+			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+			slog.String("err", err.Error()),
+			slog.String("custom_id", customIDPayload),
+		)
+		return
+	}
+	if len(dialog) == 0 {
+		b.respondError(s, i, fmt.Errorf("no dialog was selected"))
 		return
 	}
 
-	interactionResponse, err := b.buildInteractionResponse(*dialog, customID, withUsername(username), withPlaceholder())
+	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder())
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			return
@@ -489,7 +480,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(*dialog, customID, withUsername(username))
+		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username))
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -524,7 +515,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 func (b *Bot) createGifPreview(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
-	dialog model.DialogDocument,
+	dialog []model2.Dialog,
 	username string,
 	customID *customIdPayload,
 ) error {
@@ -564,7 +555,7 @@ func (b *Bot) createGifPreview(
 			return
 		}
 
-		buttons, err := b.createButtons(&dialog, customID)
+		buttons, err := b.createButtons(dialog, customID)
 		if err != nil {
 			b.logger.Error("edit failed. Failed to create buttons", slog.String("err", err.Error()))
 			return
@@ -588,30 +579,35 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, cu
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
 		return
 	}
-	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
+	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
 		b.respondError(s, i, fmt.Errorf("failed to fetch original dialog"))
 		return
 	}
+
+	fields := []discordgo.MessageComponent{}
+	for k, d := range dialog {
+		fields = append(
+			fields,
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.TextInput{
+						CustomID:  fmt.Sprintf("custom_text_%d", k),
+						Label:     fmt.Sprintf("Gif Text %d", k),
+						Style:     discordgo.TextInputParagraph,
+						Required:  false,
+						MaxLength: 255,
+						Value:     d.Content,
+					},
+				},
+			})
+	}
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID: encodeCustomID(ActionConfirmPostGif, customIDPayload),
-			Title:    "Edit and Post GIF (no preview)",
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{
-						discordgo.TextInput{
-							CustomID:  "custom_text",
-							Label:     "Gif Text",
-							Style:     discordgo.TextInputParagraph,
-							Required:  false,
-							MaxLength: 128,
-							Value:     dialog.Content,
-						},
-					},
-				},
-			},
+			CustomID:   encodeAction(ActionConfirmPostGif, customID),
+			Title:      "Edit and Post GIF (no preview)",
+			Components: fields,
 		},
 	})
 	if err != nil {
@@ -619,154 +615,32 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, cu
 	}
 }
 
-func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayload) ([]discordgo.MessageComponent, error) {
+func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) ([]discordgo.MessageComponent, error) {
 
-	before, after, err := b.srtStore.GetDialogContext(dialog.Publication, dialog.Series, dialog.Episode, dialog.Pos)
+	before, after, err := b.srtStore.GetDialogContext(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
 		return nil, err
 	}
 
-	dialogDuration := dialog.Duration()
-	//todo: need the total duration to avoid shifting past the end of the webm
-	shiftButtons := []discordgo.MessageComponent{
-		discordgo.Button{
-			Label: "Shift 5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "⏪",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-(time.Second*5)))),
-		},
-		discordgo.Button{
-			Label: "Shift 1s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "⏪",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(0-time.Second))),
-		},
-		discordgo.Button{
-			Label: "Shift 0.5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "⏩",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second/2))),
-		},
-		discordgo.Button{
-			Label: "Shift 1s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "⏩",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+time.Second)),
-		},
-		discordgo.Button{
-			Label: "Shift 5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "⏩",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift+(time.Second*5))),
-		},
-	}
-	extendButtons := []discordgo.MessageComponent{}
-	if (dialogDuration+customID.ExtendOrTrim)+(time.Second/2) <= limits.MaxGifDuration {
-		extendButtons = append(extendButtons, discordgo.Button{
-			Label: "Extend 0.5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second/2), customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)+time.Second <= limits.MaxGifDuration {
-		extendButtons = append(extendButtons, discordgo.Button{
-			Label: "Extend 1s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+time.Second, customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*5) <= limits.MaxGifDuration {
-		extendButtons = append(extendButtons, discordgo.Button{
-			Label: "Extend 5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*5), customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)+(time.Second*10) <= limits.MaxGifDuration {
-		extendButtons = append(extendButtons, discordgo.Button{
-			Label: "Extend 10s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim+(time.Second*10), customID.Shift)),
-		})
-	}
-	trimButtons := []discordgo.MessageComponent{}
-	if (dialogDuration+customID.ExtendOrTrim)-(time.Second/2) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "Trim 0.5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second/2), customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)-time.Second > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "Trim 1s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-time.Second, customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)-(time.Second*5) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "Trim 5s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second*5), customID.Shift)),
-		})
-	}
-	if (dialogDuration+customID.ExtendOrTrim)-(time.Second*10) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "Trim 10s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim-(time.Second*10), customID.Shift)),
-		})
-	}
+	dialogDuration := (dialog[len(dialog)-1].EndTimestamp - dialog[0].StartTimestamp) + customID.ExtendOrTrim
+
 	navigateButtons := []discordgo.MessageComponent{}
 	if len(before) > 0 {
+		prevCustomID, err := parseCustomIDPayload(before[0].ID(customID.EpisodeID()))
+		if err != nil {
+			return nil, err
+		}
+		//if dialogDuration+(before[0].EndTimestamp-before[0].StartTimestamp) <= limits.MaxGifDuration && len(dialog) < 5 {
+		//	navigateButtons = append(navigateButtons, discordgo.Button{
+		//		Label: "Merge Previous Subtitle",
+		//		Emoji: &discordgo.ComponentEmoji{
+		//			Name: "➕",
+		//		},
+		//		Style:    discordgo.SecondaryButton,
+		//		Disabled: false,
+		//		CustomID: encodeAction(ActionUpdatePreview, customID.WithStartPosition(prevCustomID.StartPosition)),
+		//	})
+		//}
 		navigateButtons = append(navigateButtons, discordgo.Button{
 			Label: "Previous Subtitle",
 			Emoji: &discordgo.ComponentEmoji{
@@ -774,10 +648,14 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, before[0].ID(dialog.EpisodeID)),
+			CustomID: encodeAction(ActionUpdatePreview, prevCustomID),
 		})
 	}
 	if len(after) > 0 {
+		nextCustomID, err := parseCustomIDPayload(after[0].ID(customID.EpisodeID()))
+		if err != nil {
+			return nil, err
+		}
 		navigateButtons = append(navigateButtons, discordgo.Button{
 			Label: "Next Subtitle",
 			Emoji: &discordgo.ComponentEmoji{
@@ -785,11 +663,169 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeCustomID(ActionUpdatePreview, after[0].ID(dialog.EpisodeID)),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithStartPosition(customID.StartPosition+1)),
+		})
+		if dialogDuration+(after[0].EndTimestamp-after[0].StartTimestamp) <= limits.MaxGifDuration && len(dialog) < 5 {
+			navigateButtons = append(navigateButtons, discordgo.Button{
+				Label: "Merge Next Subtitle",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "➕",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithEndPosition(nextCustomID.StartPosition)),
+			})
+		}
+	}
+
+	//todo: need the total duration to avoid shifting past the end of the webm
+	shiftButtons := []discordgo.MessageComponent{
+		discordgo.Button{
+			Label: "5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏪",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(0-(time.Second*5)))),
+		},
+		discordgo.Button{
+			Label: "1s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏪",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(0-time.Second))),
+		},
+		discordgo.Button{
+			Label: "0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏩",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(time.Second/2))),
+		},
+		discordgo.Button{
+			Label: "1s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏩",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+time.Second)),
+		},
+		discordgo.Button{
+			Label: "5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "⏩",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(time.Second*5))),
+		},
+	}
+	extendButtons := []discordgo.MessageComponent{}
+	if dialogDuration+(time.Second/2) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second/2))),
+		})
+	}
+	if dialogDuration+time.Second <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "1s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+time.Second)),
+		})
+	}
+	if dialogDuration+(time.Second*5) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second*5))),
+		})
+	}
+	if dialogDuration+(time.Second*10) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "10s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second*10))),
+		})
+	}
+	trimButtons := []discordgo.MessageComponent{}
+	if dialogDuration-(time.Second/2) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			Label: "0.5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-(time.Second/2))),
+		})
+	}
+	if dialogDuration-time.Second > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			Label: "1s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-time.Second)),
+		})
+	}
+	if dialogDuration-(time.Second*5) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			Label: "5s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-(time.Second*5))),
+		})
+	}
+
+	if customID.StartPosition != customID.EndPosition {
+		trimButtons = append(trimButtons, discordgo.Button{
+			Label: "Merged Subtitles",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(
+				ActionUpdatePreview,
+				customID.
+					WithStartPosition(customID.StartPosition).
+					WithEndPosition(customID.StartPosition)),
 		})
 	}
 
 	actions := []discordgo.MessageComponent{}
+	if len(navigateButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: navigateButtons})
+	}
 	if len(shiftButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: shiftButtons})
 	}
@@ -812,7 +848,7 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 				// Disabled allows bot to disable some buttons for users.
 				Disabled: false,
 				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeCustomID(ActionConfirmPostGif, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+				CustomID: encodeAction(ActionConfirmPostGif, customID),
 			},
 			discordgo.Button{
 				// Label is what the user will see on the button.
@@ -825,14 +861,12 @@ func (b *Bot) createButtons(dialog *model.DialogDocument, customID *customIdPayl
 				// Disabled allows bot to disable some buttons for users.
 				Disabled: false,
 				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeCustomID(ActionOpenCustomTextModal, idWithExtendOrShift(dialog.ID, customID.ExtendOrTrim, customID.Shift)),
+				CustomID: encodeAction(ActionOpenCustomTextModal, customID),
 			},
 		},
 	})
 
-	if len(navigateButtons) > 0 {
-		actions = append([]discordgo.MessageComponent{discordgo.ActionsRow{Components: navigateButtons}}, actions...)
-	}
+	spew.Dump(actions)
 
 	return actions, nil
 }
@@ -851,14 +885,26 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	if i.Member != nil {
 		username = uniqueUser(i.Member)
 	}
-	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
+	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
-		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
+		b.respondError(
+			s,
+			i,
+			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+			slog.String("err", err.Error()),
+			slog.String("custom_id", customIDPayload),
+		)
 		return
 	}
-	customText := i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
-
-	if err = b.completeResponse(s, i, *dialog, username, util.ToPtr(customText), customID, false); err != nil {
+	var customText []string
+	for k := range i.Interaction.ModalSubmitData().Components {
+		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
+	}
+	if len(dialog) == 0 {
+		b.respondError(s, i, fmt.Errorf("no dialog was selected"))
+		return
+	}
+	if err = b.completeResponse(s, i, dialog, username, customText, customID, false); err != nil {
 		b.respondError(s, i, err)
 	}
 }
@@ -881,12 +927,18 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 	if i.Member != nil {
 		username = uniqueUser(i.Member)
 	}
-	dialog, err := b.searcher.Get(context.Background(), customID.DialogID())
+	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
-		b.respondError(s, i, fmt.Errorf("failed to fetch selected line"))
+		b.respondError(
+			s,
+			i,
+			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+			slog.String("err", err.Error()),
+			slog.String("custom_id", customIDPayload),
+		)
 		return
 	}
-	if err := b.completeResponse(s, i, *dialog, username, nil, customID, false); err != nil {
+	if err := b.completeResponse(s, i, dialog, username, nil, customID, false); err != nil {
 		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
 	}
 }
@@ -894,9 +946,9 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 func (b *Bot) completeResponse(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
-	dialog model.DialogDocument,
+	dialog []model2.Dialog,
 	username string,
-	customText *string,
+	customText []string,
 	customID *customIdPayload,
 	video bool,
 ) error {
@@ -941,14 +993,14 @@ func (b *Bot) completeResponse(
 }
 
 func (b *Bot) buildInteractionResponse(
-	dialog model.DialogDocument,
+	dialog []model2.Dialog,
 	customID *customIdPayload,
 	options ...responseOption,
 ) (*discordgo.InteractionResponse, error) {
 
 	opts := resolveResponseOptions(options...)
 
-	cleanup, err := lockRenderer(opts.username, dialog.ID)
+	cleanup, err := lockRenderer(opts.username, customID.String())
 	defer cleanup()
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -999,9 +1051,9 @@ func (b *Bot) buildInteractionResponse(
 			Content: fmt.Sprintf(
 				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`",
 				bodyText,
-				dialog.ID,
-				time.Millisecond*time.Duration(dialog.StartTimestamp),
-				time.Millisecond*time.Duration(dialog.EndTimestamp),
+				customID.DialogID(),
+				dialog[0].StartTimestamp,
+				dialog[len(dialog)-1].EndTimestamp,
 				shiftLabel,
 				extendLabel,
 				editLabel,
@@ -1013,8 +1065,8 @@ func (b *Bot) buildInteractionResponse(
 	}, nil
 }
 
-func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate, err error) {
-	b.logger.Error("Error response was sent", slog.String("err", err.Error()))
+func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate, err error, logCtx ...any) {
+	b.logger.Error("Error response was sent: "+err.Error(), logCtx...)
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -1028,20 +1080,11 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 	}
 }
 
-func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, customID *customIdPayload, outputFileType OutputFileType) (*discordgo.File, error) {
-	disableCaching := customID.ExtendOrTrim != 0 || customID.Shift != 0
-	dialogText := strings.Split(dialog.Content, "\n")
-	if customText != nil {
-		disableCaching = true
-		if *customText == "" {
-			dialogText = []string{}
-		} else {
-			dialogText = strings.Split(*customText, "\n")
-		}
-	}
+func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *customIdPayload, outputFileType OutputFileType) (*discordgo.File, error) {
+	disableCaching := customID.ExtendOrTrim != 0 || customID.Shift != 0 || customText != nil
 
-	startTimestamp := time.Millisecond * time.Duration(dialog.StartTimestamp)
-	endTimestamp := time.Millisecond * time.Duration(dialog.EndTimestamp)
+	startTimestamp := dialog[0].StartTimestamp
+	endTimestamp := dialog[len(dialog)-1].EndTimestamp
 
 	if customID.Shift != 0 {
 		startTimestamp += customID.Shift
@@ -1058,12 +1101,12 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 	}
 
 	logger := b.logger.With(
-		slog.String("cache_key", dialog.ID),
-		slog.String("source", dialog.VideoFileName),
+		slog.String("cache_key", customID.DialogID()),
+		slog.String("source", dialog[0].VideoFileName),
 		slog.Duration("from", startTimestamp),
 		slog.Duration("to", endTimestamp),
 		slog.String("output", string(outputFileType)),
-		slog.String("custom_text", strings.Join(dialogText, " ")),
+		slog.Bool("custom_text", customText != nil),
 	)
 	logger.Debug("Exporting gif")
 
@@ -1078,9 +1121,9 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 	case OutputWebm:
 		mimeType = "video/webm"
 		extension = "webm"
-		cacheHit, err = b.mediaCache.Get(fmt.Sprintf("%s.%s", dialog.ID, extension), buff, disableCaching, func(writer io.Writer) error {
+		cacheHit, err = b.mediaCache.Get(createFileName(customID, extension), buff, disableCaching, func(writer io.Writer) error {
 			err := ffmpeg_go.
-				Input(path.Join(b.mediaPath, dialog.VideoFileName),
+				Input(path.Join(b.mediaPath, dialog[0].VideoFileName),
 					ffmpeg_go.KwArgs{
 						"ss": fmt.Sprintf("%0.2f", startTimestamp.Seconds()),
 					}).
@@ -1100,20 +1143,17 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 	case OutputGif:
 		mimeType = "image/gif"
 		extension = "gif"
-		cacheHit, err = b.mediaCache.Get(fmt.Sprintf("%s.%s", dialog.ID, extension), buff, disableCaching, func(writer io.Writer) error {
+		cacheHit, err = b.mediaCache.Get(createFileName(customID, extension), buff, disableCaching, func(writer io.Writer) error {
 			err := ffmpeg_go.
-				Input(path.Join(b.mediaPath, dialog.VideoFileName),
+				Input(path.Join(b.mediaPath, dialog[0].VideoFileName),
 					ffmpeg_go.KwArgs{
 						"ss": fmt.Sprintf("%0.2f", startTimestamp.Seconds()),
 						"to": fmt.Sprintf("%0.2f", endTimestamp.Seconds()),
 					}).
 				Output("pipe:",
 					ffmpeg_go.KwArgs{
-						"format": "gif",
-						"filter_complex": fmt.Sprintf(
-							"[0:v]drawtext=text='%s':fontcolor=white:fontsize=16:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10))",
-							formatGifText(56, dialogText),
-						),
+						"format":         "gif",
+						"filter_complex": createDrawtextFilter(dialog, customText),
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {
@@ -1134,33 +1174,18 @@ func (b *Bot) renderFile(dialog model.DialogDocument, customText *string, custom
 		slog.Duration("time taken", time.Since(startTime)),
 	)
 	return &discordgo.File{
-		Name:        createFileName(dialog, extension),
+		Name:        createFileName(customID, extension),
 		ContentType: mimeType,
 		Reader:      buff,
 	}, nil
 }
 
-func createFileName(dialog model.DialogDocument, suffix string) string {
-	if contentFilename := contentToFilename(dialog.Content); contentFilename != "" {
-		return fmt.Sprintf("%s.%s", contentFilename, suffix)
-	}
-	return fmt.Sprintf("%s.%s", dialog.ID, suffix)
+func createFileName(customID *customIdPayload, suffix string) string {
+	return fmt.Sprintf("%s.%s", customID.DialogID(), suffix)
 }
 
-func contentToFilename(rawContent string) string {
-	rawContent = punctuation.ReplaceAllString(rawContent, "")
-	rawContent = spaces.ReplaceAllString(rawContent, " ")
-	rawContent = metaWhitespace.ReplaceAllString(rawContent, " ")
-	rawContent = strings.ToLower(strings.TrimSpace(rawContent))
-	split := strings.Split(rawContent, " ")
-	if len(split) > 9 {
-		split = split[:8]
-	}
-	return strings.Join(split, "-")
-}
-
-func encodeCustomID(action Action, dialogID string) string {
-	return fmt.Sprintf("%s:%s", action, dialogID)
+func encodeAction(action Action, customID *customIdPayload) string {
+	return fmt.Sprintf("%s:%s", action, customID.String())
 }
 
 // formatGifText
@@ -1200,35 +1225,67 @@ func lineLength(line []string) int {
 	return total + (len(line) - 1)
 }
 
-func idWithExtendOrShift(id string, extend time.Duration, shift time.Duration) string {
-	return fmt.Sprintf("%s:%s:%s", id, extend.String(), shift.String())
-}
-
 type customIdPayload struct {
-	Publication  string
-	Series       int32
-	Episode      int32
-	Position     int64
-	ExtendOrTrim time.Duration
-	Shift        time.Duration
+	Publication   string
+	Series        int32
+	Episode       int32
+	StartPosition int64
+	EndPosition   int64
+	ExtendOrTrim  time.Duration
+	Shift         time.Duration
 }
 
 func (c *customIdPayload) DialogID() string {
-	return fmt.Sprintf("%s-%s-%d", c.Publication, util.FormatSeriesAndEpisode(int(c.Series), int(c.Episode)), c.Position)
+	return fmt.Sprintf("%s-%s", c.EpisodeID(), c.PositionRange())
+}
+
+func (c *customIdPayload) EpisodeID() string {
+	return fmt.Sprintf("%s-%s", c.Publication, util.FormatSeriesAndEpisode(int(c.Series), int(c.Episode)))
+}
+
+func (c *customIdPayload) PositionRange() string {
+	position := fmt.Sprintf("%d", c.StartPosition)
+	if c.EndPosition > c.StartPosition {
+		position = fmt.Sprintf("%s_%d", position, c.EndPosition)
+	}
+	return position
 }
 
 func (c *customIdPayload) String() string {
 	return fmt.Sprintf(
-		"%s-%s-%d%s%s",
+		"%s-%s-%s%s%s",
 		c.Publication,
 		util.FormatSeriesAndEpisode(int(c.Series), int(c.Episode)),
-		c.Position,
+		c.PositionRange(),
 		fmt.Sprintf(":%s", c.ExtendOrTrim.String()),
 		fmt.Sprintf(":%s", c.Shift.String()),
 	)
 }
 
-// e.g. peepshow-S08E06-1[:1s:1s]
+func (c *customIdPayload) WithShift(shift time.Duration) *customIdPayload {
+	cp := *c
+	cp.Shift = shift
+	return &cp
+}
+
+func (c *customIdPayload) WithExtend(extendOrTrim time.Duration) *customIdPayload {
+	cp := *c
+	cp.ExtendOrTrim = extendOrTrim
+	return &cp
+}
+
+func (c *customIdPayload) WithStartPosition(start int64) *customIdPayload {
+	cp := *c
+	cp.StartPosition = start
+	return &cp
+}
+func (c *customIdPayload) WithEndPosition(end int64) *customIdPayload {
+	cp := *c
+	cp.EndPosition = end
+	return &cp
+}
+
+// e.g. peepshow-S08E06-1[_4][:1s:1s]
 func parseCustomIDPayload(payloadStr string) (*customIdPayload, error) {
 	parts := strings.SplitN(payloadStr, "-", 3)
 	if len(parts) != 3 {
@@ -1244,11 +1301,23 @@ func parseCustomIDPayload(payloadStr string) (*customIdPayload, error) {
 	}
 	posParts := strings.Split(parts[2], ":")
 	if len(posParts) > 0 {
-		position, err := strconv.Atoi(posParts[0])
-		if err != nil {
-			return nil, fmt.Errorf("unrecognized position: %s", parts[2])
+		var startAndEnd []string
+		if strings.Contains(posParts[0], "_") {
+			startAndEnd = strings.SplitN(posParts[0], "_", 2)
+		} else {
+			startAndEnd = []string{posParts[0], posParts[0]}
 		}
-		payload.Position = int64(position)
+		startPosition, err := strconv.Atoi(startAndEnd[0])
+		if err != nil {
+			return nil, fmt.Errorf("unrecognized start position: %s (%s)", startAndEnd[0], payloadStr)
+		}
+		payload.StartPosition = int64(startPosition)
+
+		endPosition, err := strconv.Atoi(startAndEnd[1])
+		if err != nil {
+			return nil, fmt.Errorf("unrecognized end position: %s (%s)", startAndEnd[1], payloadStr)
+		}
+		payload.EndPosition = max(int64(endPosition), payload.StartPosition)
 	}
 	if len(posParts) > 1 {
 		trimOrExtend, err := time.ParseDuration(posParts[1])
@@ -1276,4 +1345,24 @@ func shortID(longID string) string {
 		return longID
 	}
 	return longID[len(longID)-6:]
+}
+
+func createDrawtextFilter(dialog []model2.Dialog, customText []string) string {
+	drawTextCommands := []string{}
+	timestampOffsets := dialog[0].StartTimestamp
+	for k, line := range dialog {
+		dialogText := line.Content
+		if len(customText) > k {
+			dialogText = customText[k]
+		}
+		startSecond := line.StartTimestamp - timestampOffsets
+		endSecond := line.EndTimestamp - timestampOffsets
+		drawTextCommands = append(drawTextCommands, fmt.Sprintf(
+			`drawtext=text='%s':fontcolor=white:fontsize=16:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10)):enable='between(t,%0.2f,%0.2f)'`,
+			formatGifText(56, strings.Split(dialogText, "\n")),
+			startSecond.Seconds(),
+			endSecond.Seconds(),
+		))
+	}
+	return fmt.Sprintf("[0:v]%s", strings.Join(drawTextCommands, ", "))
 }

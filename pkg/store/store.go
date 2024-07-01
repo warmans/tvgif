@@ -22,18 +22,19 @@ func (s *SRTStore) ImportEpisode(m model.Episode) error {
 	for _, v := range m.Dialog {
 		_, err := s.conn.Exec(`
 		REPLACE INTO dialog
-		    (id, publication, series, episode, pos, start_timestamp, end_timestamp, content) 
+		    (id, publication, series, episode, pos, start_timestamp, end_timestamp, content, video_file_name) 
 		VALUES 
-		    ($1, $2, $3, $4, $5, $6, $7, $8)
+		    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		`,
 			v.ID(m.ID()),
 			m.Publication,
 			m.Series,
 			m.Episode,
 			v.Pos,
-			v.StartTimestamp.Milliseconds(),
-			v.EndTimestamp.Milliseconds(),
+			v.StartTimestamp,
+			v.EndTimestamp,
 			v.Content,
+			m.VideoFile,
 		)
 		if err != nil {
 			return err
@@ -42,14 +43,39 @@ func (s *SRTStore) ImportEpisode(m model.Episode) error {
 	return nil
 }
 
-func (s *SRTStore) GetDialogContext(publication string, series, episode, pos int32) ([]model.Dialog, []model.Dialog, error) {
+func (s *SRTStore) GetDialogRange(publication string, series int32, episode int32, startPos int64, endPos int64) ([]model.Dialog, error) {
 	rows, err := s.conn.Queryx(
-		`SELECT pos, start_timestamp, end_timestamp, content  FROM "dialog" WHERE publication=$1 AND series=$2 AND episode=$3 AND pos >= $4 AND pos <= $5`,
+		`SELECT pos, start_timestamp, end_timestamp, content, video_file_name  FROM "dialog" WHERE publication=$1 AND series=$2 AND episode=$3 AND pos >= $4 AND pos <= $5`,
 		publication,
 		series,
 		episode,
-		pos-1,
-		pos+1,
+		startPos,
+		endPos,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	dialog := []model.Dialog{}
+	for rows.Next() {
+		row := model.Dialog{}
+		if err := rows.StructScan(&row); err != nil {
+			return nil, err
+		}
+		dialog = append(dialog, row)
+	}
+	return dialog, nil
+}
+
+func (s *SRTStore) GetDialogContext(publication string, series int32, episode int32, startPos int64, endPos int64) ([]model.Dialog, []model.Dialog, error) {
+	rows, err := s.conn.Queryx(
+		`SELECT pos, start_timestamp, end_timestamp, content, video_file_name  FROM "dialog" WHERE publication=$1 AND series=$2 AND episode=$3 AND pos >= $4 AND pos <= $5`,
+		publication,
+		series,
+		episode,
+		startPos-1,
+		endPos+1,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -63,10 +89,10 @@ func (s *SRTStore) GetDialogContext(publication string, series, episode, pos int
 		if err := rows.StructScan(&row); err != nil {
 			return nil, nil, err
 		}
-		if row.Pos < int64(pos) {
+		if row.Pos < startPos {
 			before = append(before, row)
 		}
-		if row.Pos > int64(pos) {
+		if row.Pos > endPos {
 			after = append(after, row)
 		}
 	}

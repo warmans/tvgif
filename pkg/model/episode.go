@@ -49,6 +49,7 @@ type Dialog struct {
 	StartTimestamp time.Duration `json:"start_timestamp" db:"start_timestamp"`
 	EndTimestamp   time.Duration `json:"end_timestamp" db:"end_timestamp"`
 	Content        string        `json:"content" db:"content"`
+	VideoFileName  string        `json:"video_file_name" db:"video_file_name"`
 }
 
 func (e *Dialog) ID(episodeID string) string {

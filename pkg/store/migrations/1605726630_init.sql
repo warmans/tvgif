@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS "dialog"
     "pos"             INTEGER   NOT NULL,
     "start_timestamp" TIMESTAMP NULL,
     "end_timestamp"   INTEGER   NULL,
-    "content"         TEXT      NOT NULL
+    "content"         TEXT      NOT NULL,
+    "video_file_name" TEXT      NOT NULL
 );
 
 CREATE INDEX dialog_pos ON dialog ("pos");

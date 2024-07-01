@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+var punctuation = regexp.MustCompile(`[^a-zA-Z0-9\s]+`)
+var spaces = regexp.MustCompile(`[\s]{2,}`)
+var metaWhitespace = regexp.MustCompile(`[\n\r\t]+`)
+
 func TrimToN(line string, maxLength int) string {
 	if len(line) <= maxLength {
 		return line
@@ -80,4 +84,16 @@ func InStrings(s string, ss ...string) bool {
 		}
 	}
 	return false
+}
+
+func ContentToFilename(rawContent string) string {
+	rawContent = punctuation.ReplaceAllString(rawContent, "")
+	rawContent = spaces.ReplaceAllString(rawContent, " ")
+	rawContent = metaWhitespace.ReplaceAllString(rawContent, " ")
+	rawContent = strings.ToLower(strings.TrimSpace(rawContent))
+	split := strings.Split(rawContent, " ")
+	if len(split) > 9 {
+		split = split[:8]
+	}
+	return strings.Join(split, "-")
 }
