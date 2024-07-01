@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/davecgh/go-spew/spew"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/mediacache"
@@ -865,8 +864,6 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 		},
 	})
-
-	spew.Dump(actions)
 
 	return actions, nil
 }
