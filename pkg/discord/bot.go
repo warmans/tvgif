@@ -140,10 +140,12 @@ func NewBot(
 	}
 	publicationChoices := []*discordgo.ApplicationCommandOptionChoice{}
 	for _, v := range publications {
-		publicationChoices = append(publicationChoices, &discordgo.ApplicationCommandOptionChoice{
-			Name:  v,
-			Value: v,
-		})
+		if len(publicationChoices) < 25 {
+			publicationChoices = append(publicationChoices, &discordgo.ApplicationCommandOptionChoice{
+				Name:  v,
+				Value: v,
+			})
+		}
 	}
 
 	bot := &Bot{
