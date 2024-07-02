@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"github.com/blugelabs/bluge"
 	search2 "github.com/blugelabs/bluge/search"
-	"github.com/warmans/tvgif/pkg/filter"
-	"github.com/warmans/tvgif/pkg/filter/bluge_query"
 	"github.com/warmans/tvgif/pkg/search/model"
+	"github.com/warmans/tvgif/pkg/searchterms"
+	"github.com/warmans/tvgif/pkg/searchterms/bluge_query"
 	"github.com/warmans/tvgif/pkg/util"
 	"sort"
 	"strings"
@@ -18,7 +18,7 @@ const (
 )
 
 type Searcher interface {
-	Search(ctx context.Context, f filter.Filter, page int32) ([]model.DialogDocument, error)
+	Search(ctx context.Context, f []searchterms.Term, page int32) ([]model.DialogDocument, error)
 	Get(ctx context.Context, id string) (*model.DialogDocument, error)
 	ListTerms(ctx context.Context, field string) ([]string, error)
 }
@@ -32,7 +32,7 @@ type BlugeSearch struct {
 }
 
 func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument, error) {
-	q, err := bluge_query.FilterToQuery(filter.Eq("_id", filter.String(id)))
+	q, err := bluge_query.NewBlugeQuery([]searchterms.Term{{Field: "_id", Value: searchterms.String(id), Op: searchterms.CompOpEq}})
 	if err != nil {
 		return nil, fmt.Errorf("filter was invalid: %w", err)
 	}
@@ -50,9 +50,9 @@ func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument
 	return scanDocument(match)
 }
 
-func (b *BlugeSearch) Search(ctx context.Context, f filter.Filter, page int32) ([]model.DialogDocument, error) {
+func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term, page int32) ([]model.DialogDocument, error) {
 
-	query, err := bluge_query.FilterToQuery(f)
+	query, err := bluge_query.NewBlugeQuery(f)
 	if err != nil {
 		return nil, err
 	}

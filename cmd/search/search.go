@@ -24,14 +24,12 @@ func NewSearchCommand(logger *slog.Logger) *cobra.Command {
 				return cmd.Help()
 			}
 
-			filter := searchterms.TermsToFilter(searchterms.MustParse(args[0]))
-
 			reader, err := bluge.OpenReader(bluge.DefaultConfig(indexPath))
 			if err != nil {
 				return fmt.Errorf("failed to open index: %w", err)
 			}
 			searcher := search.NewBlugeSearch(reader)
-			res, err := searcher.Search(context.Background(), filter, 1)
+			res, err := searcher.Search(context.Background(), searchterms.MustParse(args[0]), 1)
 			if err != nil {
 				return fmt.Errorf("search failed: %w", err)
 			}

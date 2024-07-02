@@ -1,7 +1,6 @@
 package searchterms
 
 import (
-	"github.com/warmans/tvgif/pkg/filter"
 	"reflect"
 	"testing"
 	"time"
@@ -19,79 +18,79 @@ func TestMustParse(t *testing.T) {
 		{
 			name: "parse word",
 			args: args{s: "foo"},
-			want: []Term{{Field: "content", Value: String("foo"), Op: filter.CompOpFuzzyLike}},
+			want: []Term{{Field: "content", Value: String("foo"), Op: CompOpFuzzyLike}},
 		},
 		{
 			name: "parse words",
 			args: args{s: "foo bar baz"},
-			want: []Term{{Field: "content", Value: String("foo bar baz"), Op: filter.CompOpFuzzyLike}},
+			want: []Term{{Field: "content", Value: String("foo bar baz"), Op: CompOpFuzzyLike}},
 		},
 		{
 			name: "parse quoted string",
 			args: args{s: `"foo bar"`},
-			want: []Term{{Field: "content", Value: String("foo bar"), Op: filter.CompOpEq}},
+			want: []Term{{Field: "content", Value: String("foo bar"), Op: CompOpEq}},
 		},
 		{
 			name: "parse quoted strings",
 			args: args{s: `"foo bar" "baz"`},
 			want: []Term{
-				{Field: "content", Value: String("foo bar"), Op: filter.CompOpEq},
-				{Field: "content", Value: String("baz"), Op: filter.CompOpEq},
+				{Field: "content", Value: String("foo bar"), Op: CompOpEq},
+				{Field: "content", Value: String("baz"), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse publication",
 			args: args{s: `~xfm`},
 			want: []Term{
-				{Field: "publication", Value: String("xfm"), Op: filter.CompOpEq},
+				{Field: "publication", Value: String("xfm"), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse mention",
 			args: args{s: `@steve`},
 			want: []Term{
-				{Field: "actor", Value: String("steve"), Op: filter.CompOpEq},
+				{Field: "actor", Value: String("steve"), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse id",
 			args: args{s: `#s01e05`},
 			want: []Term{
-				{Field: "series", Value: Int(1), Op: filter.CompOpEq},
-				{Field: "episode", Value: Int(5), Op: filter.CompOpEq},
+				{Field: "series", Value: Int(1), Op: CompOpEq},
+				{Field: "episode", Value: Int(5), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse id",
 			args: args{s: `#E05`},
 			want: []Term{
-				{Field: "episode", Value: Int(5), Op: filter.CompOpEq},
+				{Field: "episode", Value: Int(5), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse id",
 			args: args{s: `#S2`},
 			want: []Term{
-				{Field: "series", Value: Int(2), Op: filter.CompOpEq},
+				{Field: "series", Value: Int(2), Op: CompOpEq},
 			},
 		},
 		{
 			name: "parse timestamp",
 			args: args{s: `+10m30s`},
 			want: []Term{
-				{Field: "start_timestamp", Value: Duration(time.Minute*10 + time.Second*30), Op: filter.CompOpGe},
+				{Field: "start_timestamp", Value: Duration(time.Minute*10 + time.Second*30), Op: CompOpGe},
 			},
 		},
 		{
 			name: "parse all",
 			args: args{s: `@steve ~xfm #s1 +30m "man alive" karl`},
 			want: []Term{
-				{Field: "actor", Value: String("steve"), Op: filter.CompOpEq},
-				{Field: "publication", Value: String("xfm"), Op: filter.CompOpEq},
-				{Field: "series", Value: Int(1), Op: filter.CompOpEq},
-				{Field: "start_timestamp", Value: Duration(time.Minute * 30), Op: filter.CompOpGe},
-				{Field: "content", Value: String("man alive"), Op: filter.CompOpEq},
-				{Field: "content", Value: String("karl"), Op: filter.CompOpFuzzyLike},
+				{Field: "actor", Value: String("steve"), Op: CompOpEq},
+				{Field: "publication", Value: String("xfm"), Op: CompOpEq},
+				{Field: "series", Value: Int(1), Op: CompOpEq},
+				{Field: "start_timestamp", Value: Duration(time.Minute * 30), Op: CompOpGe},
+				{Field: "content", Value: String("man alive"), Op: CompOpEq},
+				{Field: "content", Value: String("karl"), Op: CompOpFuzzyLike},
 			},
 		},
 	}

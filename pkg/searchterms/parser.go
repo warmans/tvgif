@@ -3,7 +3,6 @@ package searchterms
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/warmans/tvgif/pkg/filter"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +11,7 @@ import (
 type Term struct {
 	Field string
 	Value Value
-	Op    filter.CompOp
+	Op    CompOp
 }
 
 func MustParse(s string) []Term {
@@ -80,7 +79,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return []*Term{{
 			Field: "content",
 			Value: String(strings.Trim(tok.lexeme, `"`)),
-			Op:    filter.CompOpEq,
+			Op:    CompOpEq,
 		}}, nil
 	case tagWord:
 		words := []string{tok.lexeme}
@@ -104,7 +103,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return []*Term{{
 			Field: "content",
 			Value: String(strings.Join(words, " ")),
-			Op:    filter.CompOpFuzzyLike,
+			Op:    CompOpFuzzyLike,
 		}}, nil
 	case tagMention:
 		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
@@ -114,7 +113,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return []*Term{{
 			Field: "actor",
 			Value: String(strings.ToLower(mentionText.lexeme)),
-			Op:    filter.CompOpEq,
+			Op:    CompOpEq,
 		}}, nil
 	case tagPublication:
 		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
@@ -124,7 +123,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return []*Term{{
 			Field: "publication",
 			Value: String(strings.ToLower(mentionText.lexeme)),
-			Op:    filter.CompOpEq,
+			Op:    CompOpEq,
 		}}, nil
 	case tagId:
 		mentionText, err := p.requireNext(tagQuotedString, tagWord, tagEOF)
@@ -148,7 +147,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return []*Term{{
 			Field: "start_timestamp",
 			Value: Duration(ts),
-			Op:    filter.CompOpGe,
+			Op:    CompOpGe,
 		}}, nil
 	default:
 		return nil, errors.Errorf("unexpected token '%s'", tok)
@@ -210,7 +209,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 			return []*Term{{
 				Field: "series",
 				Value: Int(int64(series)),
-				Op:    filter.CompOpEq,
+				Op:    CompOpEq,
 			}}, nil
 		}
 		if len(parts) == 2 {
@@ -221,11 +220,11 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 			return []*Term{{
 				Field: "series",
 				Value: Int(int64(series)),
-				Op:    filter.CompOpEq,
+				Op:    CompOpEq,
 			}, {
 				Field: "episode",
 				Value: Int(int64(episode)),
-				Op:    filter.CompOpEq,
+				Op:    CompOpEq,
 			}}, nil
 		}
 		return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
@@ -238,7 +237,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 		return []*Term{{
 			Field: "episode",
 			Value: Int(int64(episode)),
-			Op:    filter.CompOpEq,
+			Op:    CompOpEq,
 		}}, nil
 	}
 	return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
