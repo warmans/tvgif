@@ -69,3 +69,8 @@ type Episode struct {
 func (e *Episode) ID() string {
 	return fmt.Sprintf("%s-%s", e.Publication, util.FormatSeriesAndEpisode(int(e.Series), int(e.Episode)))
 }
+
+type Publication struct {
+	Name   string   `json:"name"`
+	Series []string `json:"series"`
+}

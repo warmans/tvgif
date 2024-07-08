@@ -29,6 +29,7 @@ type Command string
 
 const (
 	CommandSearch Command = "tvgif"
+	CommandHelp   Command = "tvgif-help"
 	CommandDelete Command = "tvgif-delete"
 )
 
@@ -129,20 +130,6 @@ func NewBot(
 	srtStore *store.SRTStore,
 ) (*Bot, error) {
 
-	publications, err := searcher.ListTerms(context.Background(), "publication")
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch publications: %w", err)
-	}
-	publicationChoices := []*discordgo.ApplicationCommandOptionChoice{}
-	for _, v := range publications {
-		if len(publicationChoices) < 25 {
-			publicationChoices = append(publicationChoices, &discordgo.ApplicationCommandOptionChoice{
-				Name:  v,
-				Value: v,
-			})
-		}
-	}
-
 	bot := &Bot{
 		logger:      logger,
 		session:     session,
@@ -167,6 +154,25 @@ func NewBot(
 				},
 			},
 			{
+				Name:        string(CommandHelp),
+				Description: "Show tvgif information",
+				Type:        discordgo.ChatApplicationCommand,
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Name:         "topic",
+						Description:  "Help topic",
+						Type:         discordgo.ApplicationCommandOptionString,
+						Required:     true,
+						Autocomplete: false,
+						Choices: []*discordgo.ApplicationCommandOptionChoice{
+							{Name: "List Publications", Value: "publications"},
+							{Name: "Query language", Value: "queries"},
+							{Name: "Controls", Value: "controls"},
+						},
+					},
+				},
+			},
+			{
 				Name: string(CommandDelete),
 				Type: discordgo.MessageApplicationCommand,
 			},
@@ -174,6 +180,7 @@ func NewBot(
 	}
 	bot.commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
 		string(CommandSearch): bot.queryBegin,
+		string(CommandHelp):   bot.helpText,
 		string(CommandDelete): bot.deletePost,
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
@@ -1168,6 +1175,89 @@ func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *
 		ContentType: mimeType,
 		Reader:      buff,
 	}, nil
+}
+
+func (b *Bot) helpText(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	topic := i.ApplicationCommandData().Options[0].StringValue()
+	if topic == "" {
+		b.respondError(s, i, fmt.Errorf("topic was not selected"))
+		return
+	}
+
+	var resp *discordgo.InteractionResponseData
+	switch topic {
+	case "publications":
+		publications, err := b.srtStore.ListPublications()
+		if err != nil {
+			b.respondError(s, i, err)
+			return
+		}
+		sb := &strings.Builder{}
+		sb.WriteString("Available Publications: \n")
+		for _, v := range publications {
+			if _, err := fmt.Fprintf(sb, "* `%s` - `S[%s]`\n", v.Name, strings.Join(v.Series, ", ")); err != nil {
+				b.respondError(s, i, err)
+				return
+			}
+		}
+		resp = &discordgo.InteractionResponseData{
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Content: sb.String(),
+		}
+	case "queries":
+		resp = &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+			Content: fmt.Sprintf(`The query language has the following operators:
+
+%[1]s
+| Prefix | Field          | Example                 | Description                               |
+|--------|----------------|-------------------------|-------------------------------------------|
+| ~      | publication    | ~sunny                  | Filters subtitles by publication          |
+| #      | series/episode | #S1E04, #S1, #E04       | Filter by a series and/or episode number. |
+| +      | timestamp      | +1m, +10m30s            | Filter by timestamp greater than.         |
+| "      | content        | "day man"               | Phrase match                              |
+%[1]s
+
+__Examples__
+
+* %[2]sday man%[2]s - search for any dialog containing %[2]sday%[2]s or %[2]sman%[2]s in any order/location.
+* %[2]s"day man"%[2]s - search for any dialog containing the phrase %[2]sday man%[2]s in that order (case insensitive).
+* %[2]s~sunny day%[2]s - search for any dialog from the %[2]ssunny%[2]s publication containing %[2]sday%[2]s
+* %[2]s~sunny +1m30s #S3E09 man "day"%[2]s - search for dialog from the %[2]ssunny%[2]s publication, season 3 episode 9 occurring after %[2]s1m30s%[2]s and containing the word %[2]sman%[2]s and %[2]sday%[2]s.
+
+`, "```", "`"),
+		}
+	case "controls":
+		resp = &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+			Content: fmt.Sprintf(`The controls work in the following way:
+%[1]s
+| Control                   | Description                                                                                 | 
+|---------------------------|---------------------------------------------------------------------------------------------|
+| ⏪ Next/Previous Subtitle | Skip to the next/previous subtitle (chronologically). Note this will reset transformations. |
+| ➕ Merge Next subtitle    | Add the next subtitle to the gif (up to 5)                                                  |
+| ⏪ 5s, ⏪ 1s, etc.        | Shift the without changing the subtitles (e.g. to fix minor alignment issues)               | 
+| ➕ 1s, ➕ 5s, etc.        | Extend the video without changing the subtitles.                                            | 
+| ✂ 1s, ✂ 5s, etc.        | Trim the video (e.g. to cut off frame transition)                                           |
+| ✂ Merged Subtitles       | If the gif contains multiple subtitles, this will trim all but the first.                   |
+| Post GIF                  | Post the gif as seen in the preview.                                                        | 
+| Post GIF with Custom Text | Alter the subtitle(s) before posting. Note no preview will be shown.                        |                    
+
+Since the gif is posted by the bot you cannot delete it in the normal way. Instead, there is an app command to do it.
+Right-click the post and go to Apps -> tvgif-delete. This will only work if you posted the original gif.
+%[1]s
+`, "```"),
+		}
+	}
+
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: resp,
+	})
+	if err != nil {
+		b.respondError(s, i, err)
+		return
+	}
 }
 
 func createFileName(customID *customIdPayload, suffix string) string {

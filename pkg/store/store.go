@@ -3,6 +3,7 @@ package store
 import (
 	"github.com/jmoiron/sqlx"
 	"github.com/warmans/tvgif/pkg/model"
+	"strings"
 )
 
 type DB interface {
@@ -97,4 +98,24 @@ func (s *SRTStore) GetDialogContext(publication string, series int32, episode in
 		}
 	}
 	return before, after, nil
+}
+
+func (s *SRTStore) ListPublications() ([]model.Publication, error) {
+	rows, err := s.conn.Queryx(`SELECT publication, GROUP_CONCAT(DISTINCT series) FROM dialog GROUP BY publication;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	publications := []model.Publication{}
+	for rows.Next() {
+		row := model.Publication{}
+		var series string
+		if err := rows.Scan(&row.Name, &series); err != nil {
+			return nil, err
+		}
+		row.Series = strings.Split(series, ",")
+		publications = append(publications, row)
+	}
+	return publications, nil
 }
