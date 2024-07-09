@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
+	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	model2 "github.com/warmans/tvgif/pkg/model"
@@ -128,7 +129,15 @@ func NewBot(
 	mediaPath string,
 	botUsername string,
 	srtStore *store.SRTStore,
+	docsRepo *docs.Repo,
 ) (*Bot, error) {
+
+	docsTopics := []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "List Publications", Value: "publications"},
+	}
+	for _, v := range docsRepo.Topics() {
+		docsTopics = append(docsTopics, &discordgo.ApplicationCommandOptionChoice{Name: v, Value: v})
+	}
 
 	bot := &Bot{
 		logger:      logger,
@@ -138,6 +147,7 @@ func NewBot(
 		mediaPath:   mediaPath,
 		srtStore:    srtStore,
 		botUsername: botUsername,
+		docs:        docsRepo,
 		commands: []*discordgo.ApplicationCommand{
 			{
 				Name:        string(CommandSearch),
@@ -164,11 +174,7 @@ func NewBot(
 						Type:         discordgo.ApplicationCommandOptionString,
 						Required:     true,
 						Autocomplete: false,
-						Choices: []*discordgo.ApplicationCommandOptionChoice{
-							{Name: "List Publications", Value: "publications"},
-							{Name: "Query language", Value: "queries"},
-							{Name: "Controls", Value: "controls"},
-						},
+						Choices:      docsTopics,
 					},
 				},
 			},
@@ -200,6 +206,7 @@ type Bot struct {
 	session         *discordgo.Session
 	searcher        search.Searcher
 	mediaCache      *mediacache.Cache
+	docs            *docs.Repo
 	mediaPath       string
 	srtStore        *store.SRTStore
 	botUsername     string
@@ -1204,49 +1211,15 @@ func (b *Bot) helpText(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			Flags:   discordgo.MessageFlagsEphemeral,
 			Content: sb.String(),
 		}
-	case "queries":
-		resp = &discordgo.InteractionResponseData{
-			Flags: discordgo.MessageFlagsEphemeral,
-			Content: fmt.Sprintf(`The query language has the following operators:
-
-%[1]s
-| Prefix | Field          | Example                 | Description                               |
-|--------|----------------|-------------------------|-------------------------------------------|
-| ~      | publication    | ~sunny                  | Filters subtitles by publication          |
-| #      | series/episode | #S1E04, #S1, #E04       | Filter by a series and/or episode number. |
-| +      | timestamp      | +1m, +10m30s            | Filter by timestamp greater than.         |
-| "      | content        | "day man"               | Phrase match                              |
-%[1]s
-
-__Examples__
-
-* %[2]sday man%[2]s - search for any dialog containing %[2]sday%[2]s or %[2]sman%[2]s in any order/location.
-* %[2]s"day man"%[2]s - search for any dialog containing the phrase %[2]sday man%[2]s in that order (case insensitive).
-* %[2]s~sunny day%[2]s - search for any dialog from the %[2]ssunny%[2]s publication containing %[2]sday%[2]s
-* %[2]s~sunny +1m30s #S3E09 man "day"%[2]s - search for dialog from the %[2]ssunny%[2]s publication, season 3 episode 9 occurring after %[2]s1m30s%[2]s and containing the word %[2]sman%[2]s and %[2]sday%[2]s.
-
-`, "```", "`"),
+	default:
+		data, err := b.docs.Get(topic)
+		if err != nil {
+			b.respondError(s, i, err)
+			return
 		}
-	case "controls":
 		resp = &discordgo.InteractionResponseData{
-			Flags: discordgo.MessageFlagsEphemeral,
-			Content: fmt.Sprintf(`The controls work in the following way:
-%[1]s
-| Control                   | Description                                                                                 | 
-|---------------------------|---------------------------------------------------------------------------------------------|
-| ⏪ Next/Previous Subtitle | Skip to the next/previous subtitle (chronologically). Note this will reset transformations. |
-| ➕ Merge Next subtitle    | Add the next subtitle to the gif (up to 5)                                                  |
-| ⏪ 5s, ⏪ 1s, etc.        | Shift the without changing the subtitles (e.g. to fix minor alignment issues)               | 
-| ➕ 1s, ➕ 5s, etc.        | Extend the video without changing the subtitles.                                            | 
-| ✂ 1s, ✂ 5s, etc.        | Trim the video (e.g. to cut off frame transition)                                           |
-| ✂ Merged Subtitles       | If the gif contains multiple subtitles, this will trim all but the first.                   |
-| Post GIF                  | Post the gif as seen in the preview.                                                        | 
-| Post GIF with Custom Text | Alter the subtitle(s) before posting. Note no preview will be shown.                        |                    
-
-Since the gif is posted by the bot you cannot delete it in the normal way. Instead, there is an app command to do it.
-Right-click the post and go to Apps -> tvgif-delete. This will only work if you posted the original gif.
-%[1]s
-`, "```"),
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Content: data,
 		}
 	}
 

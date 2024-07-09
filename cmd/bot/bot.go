@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/discord"
+	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/flag"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/metadata"
@@ -103,6 +104,11 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("no media dir specified")
 			}
 
+			docsRepo, err := docs.NewRepo()
+			if err != nil {
+				return fmt.Errorf("failed to create docs repo: %w", err)
+			}
+
 			logger.Info("Starting bot...")
 			bot, err := discord.NewBot(
 				logger,
@@ -112,14 +118,15 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				mediaPath,
 				botUsername,
 				store.NewSRTStore(conn.Db),
+				docsRepo,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to create bot: %w", err)
 			}
+
 			if err = bot.Start(); err != nil {
 				return fmt.Errorf("failed to start bot: %w", err)
 			}
-
 			stop := make(chan os.Signal, 1)
 			signal.Notify(stop, os.Interrupt)
 			<-stop

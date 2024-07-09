@@ -10,37 +10,11 @@ To do this it requires you to provide `.webm` videos and corresponding `.srt` su
 
 ### Query language
 
-| Prefix | Field          | Example                 | Description                               |
-|--------|----------------|-------------------------|-------------------------------------------|
-| ~      | publication    | `~sunny`                | Filters subtitles by publication          |
-| #      | series/episode | `#S1E04`, `#S1`, `#E04` | Filter by a series and/or episode number. |
-| +      | timestamp      | `+1m`, `+10m30s`        | Filter by timestamp greater than.         |
-| "      | content        | `"day man"`             | Phrase match                              |
-
-
-#### Examples
-
-* `day man` - search for any dialog containing `day` or `man` in any order/location.
-* `"day man"` - search for any dialog containing the phrase `day man` in that order (case insensitive).
-* `~sunny day` - search for any dialog from the `sunny` publication containing `day`
-* `~sunny +1m30s #S3E09 man "day"` - search for dialog from the `sunny` publication, season 3 episode 9 occurring after `1m30s` and containing the word `man` and `day`.
+See the options available for queries here: [Queries](pkg/docs/topics/Queries.md)
 
 ### Controls
 
-| Control                   | Description                                                                                 | 
-|---------------------------|---------------------------------------------------------------------------------------------|
-| ⏪ Next/Previous Subtitle  | Skip to the next/previous subtitle (chronologically). Note this will reset transformations. |
-| ➕ Merge Next subtitle     | Add the next subtitle to the gif (up to 5)                                                  |
-| ⏪ 5s, ⏪ 1s, etc.          | Shift the without changing the subtitles (e.g. to fix minor alignment issues)               | 
-| ➕ 1s, ➕ 5s, etc.          | Extend the video without changing the subtitles.                                            | 
-| ✂ 1s, ✂ 5s, etc.          | Trim the video (e.g. to cut off frame transition)                                           |
-| ✂ Merged Subtitles        | If the gif contains multiple subtitles, this will trim all but the first.                   |
-| Post GIF                  | Post the gif as seen in the preview.                                                        | 
-| Post GIF with Custom Text | Alter the subtitle(s) before posting. Note no preview will be shown.                        |                    
-
-Since the gif is posted by the bot you cannot delete it in the normal way. Instead, there is an app command to do it.
-Right-click the post and go to `Apps -> tvgif-delete`. This will only work if you posted the original gif.
-
+See how to use the gifs controls here: [Controls](pkg/docs/topics/Controls.md)
 
 ### Deploying with Docker
 
