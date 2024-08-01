@@ -15,6 +15,7 @@ const (
 	tagPublication = "~"
 	tagId          = "#"
 	tagTimestamp   = "+"
+	tagOffset      = ">"
 
 	tagQuotedString = "QUOTED_STRING"
 	tagWord         = "WORD"
@@ -82,6 +83,8 @@ func (s *scanner) next() (token, error) {
 		return s.emit(tagId), nil
 	case '+':
 		return s.emit(tagTimestamp), nil
+	case '>':
+		return s.emit(tagOffset), nil
 	case '"':
 		return s.scanString()
 	default:

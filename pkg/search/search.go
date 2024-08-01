@@ -18,7 +18,7 @@ const (
 )
 
 type Searcher interface {
-	Search(ctx context.Context, f []searchterms.Term, page int32) ([]model.DialogDocument, error)
+	Search(ctx context.Context, f []searchterms.Term) ([]model.DialogDocument, error)
 	Get(ctx context.Context, id string) (*model.DialogDocument, error)
 	ListTerms(ctx context.Context, field string) ([]string, error)
 }
@@ -32,7 +32,7 @@ type BlugeSearch struct {
 }
 
 func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument, error) {
-	q, err := bluge_query.NewBlugeQuery([]searchterms.Term{{Field: "_id", Value: searchterms.String(id), Op: searchterms.CompOpEq}})
+	q, _, err := bluge_query.NewBlugeQuery([]searchterms.Term{{Field: "_id", Value: searchterms.String(id), Op: searchterms.CompOpEq}})
 	if err != nil {
 		return nil, fmt.Errorf("filter was invalid: %w", err)
 	}
@@ -50,14 +50,19 @@ func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument
 	return scanDocument(match)
 }
 
-func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term, page int32) ([]model.DialogDocument, error) {
+func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term) ([]model.DialogDocument, error) {
 
-	query, err := bluge_query.NewBlugeQuery(f)
+	query, offset, err := bluge_query.NewBlugeQuery(f)
 	if err != nil {
 		return nil, err
 	}
 
-	req := bluge.NewTopNSearch(PageSize, query).SetFrom(PageSize * int(page))
+	setFrom := 0
+	if offset != nil {
+		setFrom = int(*offset)
+	}
+
+	req := bluge.NewTopNSearch(PageSize, query).SetFrom(setFrom)
 
 	dmi, err := b.index.Search(ctx, req)
 	if err != nil {

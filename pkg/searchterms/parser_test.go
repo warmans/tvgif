@@ -82,8 +82,15 @@ func TestMustParse(t *testing.T) {
 			},
 		},
 		{
+			name: "parse offset",
+			args: args{s: `>20`},
+			want: []Term{
+				{Field: "offset", Value: Int(20), Op: CompOpEq},
+			},
+		},
+		{
 			name: "parse all",
-			args: args{s: `@steve ~xfm #s1 +30m "man alive" karl`},
+			args: args{s: `@steve ~xfm #s1 +30m "man alive" karl >10`},
 			want: []Term{
 				{Field: "actor", Value: String("steve"), Op: CompOpEq},
 				{Field: "publication", Value: String("xfm"), Op: CompOpEq},
@@ -91,6 +98,7 @@ func TestMustParse(t *testing.T) {
 				{Field: "start_timestamp", Value: Duration(time.Minute * 30), Op: CompOpGe},
 				{Field: "content", Value: String("man alive"), Op: CompOpEq},
 				{Field: "content", Value: String("karl"), Op: CompOpFuzzyLike},
+				{Field: "offset", Value: Int(10), Op: CompOpEq},
 			},
 		},
 	}

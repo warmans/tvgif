@@ -29,7 +29,7 @@ func NewSearchCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to open index: %w", err)
 			}
 			searcher := search.NewBlugeSearch(reader)
-			res, err := searcher.Search(context.Background(), searchterms.MustParse(args[0]), 1)
+			res, err := searcher.Search(context.Background(), searchterms.MustParse(args[0]))
 			if err != nil {
 				return fmt.Errorf("search failed: %w", err)
 			}

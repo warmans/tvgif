@@ -149,6 +149,20 @@ func (p *parser) parseInner() ([]*Term, error) {
 			Value: Duration(ts),
 			Op:    CompOpGe,
 		}}, nil
+	case tagOffset:
+		offsetText, err := p.requireNext(tagInt, tagEOF)
+		if err != nil {
+			return nil, err
+		}
+		intVal, err := strconv.ParseInt(offsetText.lexeme, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("offset was not a number: %w", err)
+		}
+		return []*Term{{
+			Field: "offset",
+			Value: Int(intVal),
+			Op:    CompOpEq,
+		}}, nil
 	default:
 		return nil, errors.Errorf("unexpected token '%s'", tok)
 	}

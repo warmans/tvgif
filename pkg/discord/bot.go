@@ -156,7 +156,7 @@ func NewBot(
 				Options: []*discordgo.ApplicationCommandOption{
 					{
 						Name:         "query",
-						Description:  `Enter a partial quote. Phrase match with "double quotes". Filter with ~publication #s1e01 +10m30s`,
+						Description:  `Phrase match with "quotes". Page with >N e.g. >10. Filter with ~publication #s1e01 +10m30s`,
 						Type:         discordgo.ApplicationCommandOptionString,
 						Required:     true,
 						Autocomplete: true,
@@ -406,7 +406,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		res, err := b.searcher.Search(context.Background(), terms, 0)
+		res, err := b.searcher.Search(context.Background(), terms)
 		if err != nil {
 			b.logger.Error("Failed to fetch autocomplete options", slog.String("err", err.Error()))
 			return

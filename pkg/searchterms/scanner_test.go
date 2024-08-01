@@ -77,6 +77,14 @@ func TestScan(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "scan offset",
+			args: args{
+				str: `>10`,
+			},
+			want:    []token{{tag: tagOffset, lexeme: ">"}, {tag: tagInt, lexeme: "10"}, {tag: tagEOF}},
+			wantErr: false,
+		},
+		{
 			name: "scan everything",
 			args: args{
 				str: `"man alive" @steve ~xfm #s1 foo`,

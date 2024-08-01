@@ -6,19 +6,43 @@ import (
 	"github.com/warmans/tvgif/pkg/search/mapping"
 	"github.com/warmans/tvgif/pkg/search/model"
 	"github.com/warmans/tvgif/pkg/searchterms"
+	"github.com/warmans/tvgif/pkg/util"
 	"math"
+	"slices"
 	"strings"
 	"time"
 )
 
-func NewBlugeQuery(terms []searchterms.Term) (bluge.Query, error) {
+func extractOffset(terms []searchterms.Term) ([]searchterms.Term, *int64) {
+	offsetIdx := slices.IndexFunc(terms, func(val searchterms.Term) bool {
+		return val.Field == "offset"
+	})
+	if offsetIdx == -1 {
+		return terms, nil
+	}
+	var offset *int64
+	if offsetIdx >= 0 {
+		if offsetVal := terms[offsetIdx].Value.Value().(int64); offsetVal >= 0 {
+			offset = util.ToPtr(offsetVal)
+		}
+		terms = append(terms[:offsetIdx], terms[offsetIdx+1:]...)
+	}
+	return terms, offset
+}
+
+func NewBlugeQuery(terms []searchterms.Term) (bluge.Query, *int64, error) {
+
+	// the paging/offset is included in the filter string but is not a filter so it needs to be
+	// extracted.
+	filteredTerms, offset := extractOffset(terms)
+
 	q := &BlugeQuery{q: bluge.NewBooleanQuery()}
-	for _, v := range terms {
+	for _, v := range filteredTerms {
 		if err := q.And(v); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return q.q, nil
+	return q.q, offset, nil
 }
 
 type BlugeQuery struct {
