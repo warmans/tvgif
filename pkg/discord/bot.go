@@ -3,6 +3,7 @@ package discord
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
@@ -50,6 +51,7 @@ const (
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
+var extractOriginalTerms = regexp.MustCompile(".*original terms: `([^`]+)`")
 
 var rendersInProgress = map[string]string{}
 var renderMutex = sync.RWMutex{}
@@ -72,6 +74,7 @@ type responseOptions struct {
 	customText     []string
 	outputFileType OutputFileType
 	placeholder    bool
+	originalTerms  string
 }
 
 type responseOption func(options *responseOptions)
@@ -101,6 +104,12 @@ func withVideo(video bool) responseOption {
 func withPlaceholder() responseOption {
 	return func(options *responseOptions) {
 		options.placeholder = true
+	}
+}
+
+func withOriginalTerms(terms string) responseOption {
+	return func(options *responseOptions) {
+		options.originalTerms = terms
 	}
 }
 
@@ -356,11 +365,22 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.respondError(s, i, fmt.Errorf("dialog was not selected"))
 			return
 		}
+
+		result := &struct {
+			Terms string
+			ID    string
+		}{}
+		err := json.Unmarshal([]byte(selection), result)
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to marshal result ID: %w", err))
+			return
+		}
+
 		username := "unknown"
 		if i.Member != nil {
 			username = uniqueUser(i.Member)
 		}
-		customID, err := parseCustomIDPayload(selection)
+		customID, err := parseCustomIDPayload(result.ID)
 		if err != nil {
 			b.respondError(s, i, fmt.Errorf("invalid selection"))
 			return
@@ -380,7 +400,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.respondError(s, i, fmt.Errorf("no dialog was selected"), slog.String("custom_id", customID.String()))
 			return
 		}
-		if err := b.createGifPreview(s, i, dialog, username, customID); err != nil {
+		if err := b.createGifPreview(s, i, dialog, username, customID, result.Terms); err != nil {
 			b.logger.Error("Failed to begin video response", slog.String("err", err.Error()))
 		}
 		return
@@ -413,10 +433,18 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		var choices []*discordgo.ApplicationCommandOptionChoice
 		for _, v := range res {
+			payload, err := json.Marshal(struct {
+				Terms string
+				ID    string
+			}{rawTerms, v.ID})
+			if err != nil {
+				b.logger.Error("failed to marshal result", slog.String("err", err.Error()))
+				continue
+			}
 			name := fmt.Sprintf("[%s] %s", v.EpisodeID, v.Content)
 			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
 				Name:  util.TrimToN(name, 100),
-				Value: v.ID,
+				Value: string(payload),
 			})
 		}
 		if err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -437,6 +465,12 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 	username := "unknown"
 	if i.Member != nil {
 		username = uniqueUser(i.Member)
+	}
+
+	terms := "unknown"
+	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
+	if len(foundTerms) == 2 {
+		terms = foundTerms[1]
 	}
 
 	customID, err := parseCustomIDPayload(customIDPayload)
@@ -461,7 +495,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 
-	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder())
+	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withOriginalTerms(terms))
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			return
@@ -486,7 +520,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username))
+		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username), withOriginalTerms(terms))
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -524,9 +558,10 @@ func (b *Bot) createGifPreview(
 	dialog []model2.Dialog,
 	username string,
 	customID *customIdPayload,
+	originalTerms string,
 ) error {
 	// send a placeholder
-	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder())
+	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withOriginalTerms(originalTerms))
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			fmt.Println("Duplicated interaction")
@@ -543,7 +578,12 @@ func (b *Bot) createGifPreview(
 
 	// update with the gif
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username))
+		interactionResponse, err = b.buildInteractionResponse(
+			dialog,
+			customID,
+			withUsername(username),
+			withOriginalTerms(originalTerms),
+		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -959,7 +999,7 @@ func (b *Bot) completeResponse(
 	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withVideo(video))
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
-			fmt.Println("Duplicated interaction")
+			b.logger.Warn("Ignored duplicated interaction")
 			return nil
 		}
 		if errors.Is(err, errRenderInProgress) {
@@ -1049,11 +1089,15 @@ func (b *Bot) buildInteractionResponse(
 			shiftLabel = fmt.Sprintf("(<<%s)", customID.Shift.String())
 		}
 	}
+	originalTerms := ""
+	if opts.originalTerms != "" {
+		originalTerms = fmt.Sprintf("\noriginal terms: `%s`", opts.originalTerms)
+	}
 	return &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`",
+				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`%s",
 				bodyText,
 				customID.DialogID(),
 				dialog[0].StartTimestamp,
@@ -1062,6 +1106,7 @@ func (b *Bot) buildInteractionResponse(
 				extendLabel,
 				editLabel,
 				opts.username,
+				originalTerms,
 			),
 			Files:       files,
 			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
