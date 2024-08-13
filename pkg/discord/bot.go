@@ -40,6 +40,7 @@ type Action string
 const (
 	ActionConfirmPostGif      = Action("cfrmg")
 	ActionOpenCustomTextModal = Action("cstm")
+	ActionNextResult          = Action("nxt")
 	ActionUpdatePreview       = Action("upd")
 )
 
@@ -200,6 +201,7 @@ func NewBot(
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:      bot.postGif,
+		ActionNextResult:          bot.nextResult,
 		ActionOpenCustomTextModal: bot.editModal,
 		ActionUpdatePreview:       bot.updatePreview,
 	}
@@ -909,6 +911,19 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 				// CustomID is a thing telling Discord which data to send when this button will be pressed.
 				CustomID: encodeAction(ActionOpenCustomTextModal, customID),
 			},
+			discordgo.Button{
+				// Label is what the user will see on the button.
+				Label: "Next Result",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "❌",
+				},
+				// Style provides coloring of the button. There are not so many styles tho.
+				Style: discordgo.SecondaryButton,
+				// Disabled allows bot to disable some buttons for users.
+				Disabled: false,
+				// CustomID is a thing telling Discord which data to send when this button will be pressed.
+				CustomID: encodeAction(ActionNextResult, customID),
+			},
 		},
 	})
 
@@ -1276,6 +1291,53 @@ func (b *Bot) helpText(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		b.respondError(s, i, err)
 		return
 	}
+}
+
+func (b *Bot) nextResult(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+
+	if i.Type != discordgo.InteractionMessageComponent {
+		return
+	}
+	if customIDPayload == "" {
+		b.respondError(s, i, fmt.Errorf("missing customID"))
+		return
+	}
+	customID, err := parseCustomIDPayload(customIDPayload)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("invalid customID"))
+		return
+	}
+	rawTerms := "unknown"
+	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
+	if len(foundTerms) == 2 {
+		rawTerms = foundTerms[1]
+	} else {
+		b.respondError(s, i, fmt.Errorf("failed to extract terms from message"))
+		return
+	}
+	terms, err := searchterms.Parse(rawTerms)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to parse terms from message"))
+		return
+	}
+	res, err := b.searcher.Search(context.Background(), terms, search.OverridePageSize(100))
+	if err != nil {
+		b.logger.Error("Failed to fetch autocomplete options", slog.String("err", err.Error()))
+		return
+	}
+	currentSelection := -1
+	for k, v := range res {
+		if v.ID == customID.DialogID() {
+			currentSelection = k
+		}
+	}
+	// no more results or current result not found.
+	if currentSelection == -1 || currentSelection+1 >= len(res) {
+		b.updatePreview(s, i, customIDPayload)
+		return
+	}
+
+	b.updatePreview(s, i, res[currentSelection+1].ID)
 }
 
 func createFileName(customID *customIdPayload, suffix string) string {

@@ -14,11 +14,31 @@ import (
 )
 
 const (
-	PageSize = 10
+	DefaultPageSize = 10
 )
 
+type searchOverrides struct {
+	pageSize *int
+}
+
+type Override func(overrides *searchOverrides)
+
+func OverridePageSize(pageSize int) Override {
+	return func(overrides *searchOverrides) {
+		overrides.pageSize = util.ToPtr(pageSize)
+	}
+}
+
+func resolveOverrides(opts []Override) *searchOverrides {
+	overrides := &searchOverrides{}
+	for _, v := range opts {
+		v(overrides)
+	}
+	return overrides
+}
+
 type Searcher interface {
-	Search(ctx context.Context, f []searchterms.Term) ([]model.DialogDocument, error)
+	Search(ctx context.Context, f []searchterms.Term, overrides ...Override) ([]model.DialogDocument, error)
 	Get(ctx context.Context, id string) (*model.DialogDocument, error)
 	ListTerms(ctx context.Context, field string) ([]string, error)
 }
@@ -50,7 +70,9 @@ func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument
 	return scanDocument(match)
 }
 
-func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term) ([]model.DialogDocument, error) {
+func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term, overrides ...Override) ([]model.DialogDocument, error) {
+
+	opts := resolveOverrides(overrides)
 
 	query, offset, err := bluge_query.NewBlugeQuery(f)
 	if err != nil {
@@ -62,7 +84,12 @@ func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term) ([]model
 		setFrom = int(*offset)
 	}
 
-	req := bluge.NewTopNSearch(PageSize, query).SetFrom(setFrom)
+	pageSize := DefaultPageSize
+	if opts.pageSize != nil {
+		pageSize = *opts.pageSize
+	}
+
+	req := bluge.NewTopNSearch(pageSize, query).SetFrom(setFrom)
 
 	dmi, err := b.index.Search(ctx, req)
 	if err != nil {
