@@ -1307,15 +1307,12 @@ func (b *Bot) nextResult(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
 		return
 	}
-	rawTerms := "unknown"
 	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
-	if len(foundTerms) == 2 {
-		rawTerms = foundTerms[1]
-	} else {
+	if len(foundTerms) != 2 {
 		b.respondError(s, i, fmt.Errorf("failed to extract terms from message"))
 		return
 	}
-	terms, err := searchterms.Parse(rawTerms)
+	terms, err := searchterms.Parse(foundTerms[1])
 	if err != nil {
 		b.respondError(s, i, fmt.Errorf("failed to parse terms from message"))
 		return
