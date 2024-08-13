@@ -41,6 +41,7 @@ const (
 	ActionConfirmPostGif      = Action("cfrmg")
 	ActionOpenCustomTextModal = Action("cstm")
 	ActionNextResult          = Action("nxt")
+	ActionPrevResult          = Action("prv")
 	ActionUpdatePreview       = Action("upd")
 )
 
@@ -202,6 +203,7 @@ func NewBot(
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:      bot.postGif,
 		ActionNextResult:          bot.nextResult,
+		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
 		ActionUpdatePreview:       bot.updatePreview,
 	}
@@ -913,7 +915,20 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			discordgo.Button{
 				// Label is what the user will see on the button.
-				Label: "Next Result",
+				Label: "Prev",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "❌",
+				},
+				// Style provides coloring of the button. There are not so many styles tho.
+				Style: discordgo.SecondaryButton,
+				// Disabled allows bot to disable some buttons for users.
+				Disabled: false,
+				// CustomID is a thing telling Discord which data to send when this button will be pressed.
+				CustomID: encodeAction(ActionPrevResult, customID),
+			},
+			discordgo.Button{
+				// Label is what the user will see on the button.
+				Label: "Next",
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "❌",
 				},
@@ -1294,6 +1309,14 @@ func (b *Bot) helpText(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func (b *Bot) nextResult(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+	b.nextOrPreviousResult(s, i, customIDPayload, true)
+}
+
+func (b *Bot) previousResult(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+	b.nextOrPreviousResult(s, i, customIDPayload, false)
+}
+
+func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string, next bool) {
 
 	if i.Type != discordgo.InteractionMessageComponent {
 		return
@@ -1328,13 +1351,19 @@ func (b *Bot) nextResult(s *discordgo.Session, i *discordgo.InteractionCreate, c
 			currentSelection = k
 		}
 	}
+	var nextSelection int
+	if next {
+		nextSelection = currentSelection + 1
+	} else {
+		nextSelection = currentSelection - 1
+	}
 	// no more results or current result not found.
-	if currentSelection == -1 || currentSelection+1 >= len(res) {
+	if currentSelection == -1 || nextSelection >= len(res) || nextSelection < 0 {
 		b.updatePreview(s, i, customIDPayload)
 		return
 	}
 
-	b.updatePreview(s, i, res[currentSelection+1].ID)
+	b.updatePreview(s, i, res[nextSelection].ID)
 }
 
 func createFileName(customID *customIdPayload, suffix string) string {
