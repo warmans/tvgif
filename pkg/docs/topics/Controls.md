@@ -10,7 +10,8 @@
 | ✂ 1s, ✂ 5s, etc.          | Trim the video (e.g. to cut off frame transition)                                           |
 | ✂ Merged Subtitles        | If the gif contains multiple subtitles, this will trim all but the first.                   |
 | Post GIF                  | Post the gif as seen in the preview.                                                        | 
-| Post GIF with Custom Text | Alter the subtitle(s) before posting. Note no preview will be shown.                        |                    
+| Post GIF with Custom Text | Alter the subtitle(s) before posting. Note no preview will be shown.                        |
+| Prev / Next               | Skip to the next or previous search result. If no more results are available the gif will just refresh |                    
 ```
 
 __Deleting GIFs__
