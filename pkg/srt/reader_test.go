@@ -53,7 +53,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name: "single result above limit",
-			args: args{source: "1\n00:00:01,000 --> 00:00:30,000\nHere's what I love most\nabout food and diet."},
+			args: args{source: "1\n00:00:01,000 --> 00:00:40,000\nHere's what I love most\nabout food and diet."},
 			want: []model.Dialog{
 				{
 					Pos:            1,
