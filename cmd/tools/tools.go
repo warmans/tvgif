@@ -30,7 +30,7 @@ func NewToolsCommand(logger *slog.Logger) *cobra.Command {
 }
 
 var nameWithShortSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)(\s+)?[eE](?P<episode>\d+).*$`)
-var nameWithLongSeasonAndEpisode = regexp.MustCompile(`^.*[sS]eason (?P<series>\d+) [eE]pisode (?P<episode>\d+).*$`)
+var nameWithLongSeasonAndEpisode = regexp.MustCompile(`^.*[sS](eason|eries) (?P<series>\d+) [eE]pisode (?P<episode>\d+).*$`)
 var nameWithSplitSeasonAndEpisode = regexp.MustCompile(`^.*[sS](?P<series>\d+)\.[eE](?P<episode>\d+).*$`)
 var shortSeasonAndEpisode = regexp.MustCompile(`^.*(?P<series>\d+)x(?P<episode>\d+).*$`)
 

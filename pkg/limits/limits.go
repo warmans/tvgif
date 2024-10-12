@@ -2,4 +2,4 @@ package limits
 
 import "time"
 
-const MaxGifDuration = time.Second * 20
+const MaxGifDuration = time.Second * 30
