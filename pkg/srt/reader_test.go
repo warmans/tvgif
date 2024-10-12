@@ -58,7 +58,7 @@ func TestRead(t *testing.T) {
 				{
 					Pos:            1,
 					StartTimestamp: time.Second,
-					EndTimestamp:   time.Second * 21,
+					EndTimestamp:   time.Second * 31,
 					Content:        "Here's what I love most\nabout food and diet.",
 				},
 			},
