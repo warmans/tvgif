@@ -1,21 +1,21 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/discord"
 	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/flag"
 	"github.com/warmans/tvgif/pkg/mediacache"
-	"github.com/warmans/tvgif/pkg/metadata"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/store"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
+	"time"
 )
 
 func NewBotCommand(logger *slog.Logger) *cobra.Command {
@@ -34,6 +34,12 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 		Use:   "bot",
 		Short: "start the discord bot",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancelCtx := context.WithCancel(context.Background())
+			defer cancelCtx()
+
+			if metadataPath == "" {
+				return fmt.Errorf("no METADATA_PATH specified")
+			}
 
 			logger.Info("Opening DB...", slog.String("dsn", dbCfg.DSN))
 			conn, err := store.NewConn(dbCfg)
@@ -49,42 +55,22 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create searcher: %w", err)
 			}
 
+			refresher := search.NewBlugeRefresher(
+				metadataPath,
+				mediaPath,
+				indexPath,
+				searcher,
+				conn,
+				logger,
+			)
+
 			if updateDataOnStartup {
-				if metadataPath == "" {
-					return fmt.Errorf("no METADATA_PATH specified")
-				}
-				updateFn := func() {
-					logger.Info("Updating Metadata...", slog.String("path", metadataPath))
-					if err := metadata.CreateMetadataFromSRTs(logger, mediaPath, metadataPath); err != nil {
-						logger.Error("failed to update metadata", slog.String("err", err.Error()))
-					}
-					logger.Info("Updating Index...", slog.String("path", indexPath))
-					if err := search.PopulateIndex(logger, metadataPath, indexPath); err != nil {
-						logger.Error("failed to update index", slog.String("err", err.Error()))
-					}
-					logger.Info("Updating DB...", slog.String("dsn", dbCfg.DSN))
-					if err := store.InitDB(logger, metadataPath, conn); err != nil {
-						logger.Error("failed to update db", slog.String("err", err.Error()))
-					}
-					logger.Info("Refresh index snapshot...")
-					if err := searcher.RefreshIndex(); err != nil {
-						logger.Error("failed to refresh index snapshot", slog.String("err", err.Error()))
-					}
-				}
-				if _, err := os.Stat(indexPath); err == nil {
-					logger.Info("Index exists, performing async update")
-					go updateFn()
-				} else {
-					if errors.Is(err, os.ErrNotExist) {
-						// it's not possible to open the index if it hasn't been created.
-						// So if there is no index the first import must happen before the bot starts.
-						logger.Info("Index does not exist, performing sync update")
-						updateFn()
-					} else {
-						logger.Error("failed to stat index path", slog.String("err", err.Error()))
-					}
+				if err := refresher.Refresh(); err != nil {
+					logger.Error("initial refresh failed", slog.String("err", err.Error()))
 				}
 			}
+
+			go refresher.Schedule(ctx, time.Minute*5)
 
 			logger.Info("Creating discord session...")
 			if discordToken == "" {
