@@ -11,6 +11,7 @@ import (
 	"github.com/warmans/tvgif/pkg/util"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
@@ -43,12 +44,39 @@ type Searcher interface {
 	ListTerms(ctx context.Context, field string) ([]string, error)
 }
 
-func NewBlugeSearch(index *bluge.Reader) *BlugeSearch {
-	return &BlugeSearch{index: index}
+func NewBlugeSearch(indexPath string) (*BlugeSearch, error) {
+	s := &BlugeSearch{
+		indexReadLock: &sync.RWMutex{},
+		indexPath:     indexPath,
+	}
+	if err := s.RefreshIndex(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 type BlugeSearch struct {
-	index *bluge.Reader
+	indexReadLock *sync.RWMutex
+	index         *bluge.Reader
+	indexPath     string
+}
+
+func (b *BlugeSearch) RefreshIndex() error {
+	b.indexReadLock.Lock()
+	defer b.indexReadLock.Unlock()
+	reader, err := bluge.OpenReader(bluge.DefaultConfig(b.indexPath))
+	if err != nil {
+		return fmt.Errorf("failed to open index: %w", err)
+	}
+	b.index = reader
+	return nil
+
+}
+
+func (b *BlugeSearch) withSnapshot(fn func(r *bluge.Reader) error) error {
+	b.indexReadLock.RLock()
+	defer b.indexReadLock.RUnlock()
+	return fn(b.index)
 }
 
 func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument, error) {
@@ -56,17 +84,24 @@ func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument
 	if err != nil {
 		return nil, fmt.Errorf("filter was invalid: %w", err)
 	}
-	docs, err := b.index.Search(ctx, bluge.NewTopNSearch(1, q))
-	if err != nil {
+	var match *search2.DocumentMatch
+	if err := b.withSnapshot(func(r *bluge.Reader) error {
+		docs, err := b.index.Search(ctx, bluge.NewTopNSearch(1, q))
+		if err != nil {
+			return err
+		}
+		match, err = docs.Next()
+		if err != nil {
+			return err
+		}
+		if match == nil {
+			return fmt.Errorf("no match found")
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	match, err := docs.Next()
-	if err != nil {
-		return nil, err
-	}
-	if match == nil {
-		return nil, fmt.Errorf("no match found")
-	}
+
 	return scanDocument(match)
 }
 
@@ -91,59 +126,69 @@ func (b *BlugeSearch) Search(ctx context.Context, f []searchterms.Term, override
 
 	req := bluge.NewTopNSearch(pageSize, query).SetFrom(setFrom)
 
-	dmi, err := b.index.Search(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
-	}
-
-	match, err := dmi.Next()
-	if err != nil {
-		return nil, err
-	}
 	var results []model.DialogDocument
-	for match != nil {
-		res, err := scanDocument(match)
+	if err := b.withSnapshot(func(r *bluge.Reader) error {
+		dmi, err := b.index.Search(ctx, req)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if res != nil {
-			results = append(results, *res)
-		}
-		match, err = dmi.Next()
+		match, err := dmi.Next()
 		if err != nil {
-			return nil, err
+			return err
 		}
+
+		for match != nil {
+			res, err := scanDocument(match)
+			if err != nil {
+				return err
+			}
+			if res != nil {
+				results = append(results, *res)
+			}
+			match, err = dmi.Next()
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
 	}
 	return results, err
 }
 
 func (b *BlugeSearch) ListTerms(ctx context.Context, fieldName string) ([]string, error) {
 
-	fieldDict, err := b.index.DictionaryIterator(fieldName, nil, []byte{}, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if cerr := fieldDict.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	tfd, err := fieldDict.Next()
 	terms := []string{}
-	for err == nil && tfd != nil && strings.TrimSpace(tfd.Term()) != "" {
-		terms = append(terms, tfd.Term())
-		if len(terms) > 100 {
-			return nil, fmt.Errorf("too many terms for field '%s' returned", fieldName)
+	err := b.withSnapshot(func(r *bluge.Reader) error {
+		fieldDict, err := b.index.DictionaryIterator(fieldName, nil, []byte{}, nil)
+		if err != nil {
+			return err
 		}
-		tfd, err = fieldDict.Next()
-	}
+		defer func() {
+			if cerr := fieldDict.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
+		}()
 
-	sort.Slice(terms, func(i, j int) bool {
-		return terms[i] > terms[j]
+		tfd, err := fieldDict.Next()
+		terms := []string{}
+		for err == nil && tfd != nil && strings.TrimSpace(tfd.Term()) != "" {
+			terms = append(terms, tfd.Term())
+			if len(terms) > 100 {
+				return fmt.Errorf("too many terms for field '%s' returned", fieldName)
+			}
+			tfd, err = fieldDict.Next()
+		}
+
+		sort.Slice(terms, func(i, j int) bool {
+			return terms[i] > terms[j]
+		})
+
+		return nil
 	})
 
-	return terms, nil
+	return terms, err
 }
 
 func scanDocument(match *search2.DocumentMatch) (*model.DialogDocument, error) {

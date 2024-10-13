@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"fmt"
-	"github.com/blugelabs/bluge"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"github.com/warmans/tvgif/pkg/search"
@@ -24,11 +23,10 @@ func NewSearchCommand(logger *slog.Logger) *cobra.Command {
 				return cmd.Help()
 			}
 
-			reader, err := bluge.OpenReader(bluge.DefaultConfig(indexPath))
+			searcher, err := search.NewBlugeSearch(indexPath)
 			if err != nil {
 				return fmt.Errorf("failed to open index: %w", err)
 			}
-			searcher := search.NewBlugeSearch(reader)
 			res, err := searcher.Search(context.Background(), searchterms.MustParse(args[0]))
 			if err != nil {
 				return fmt.Errorf("search failed: %w", err)

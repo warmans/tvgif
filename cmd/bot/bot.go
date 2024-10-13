@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"github.com/blugelabs/bluge"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -44,6 +43,12 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			if indexPath == "" {
 				return fmt.Errorf("no INDEX_PATH specified")
 			}
+
+			searcher, err := search.NewBlugeSearch(indexPath)
+			if err != nil {
+				return fmt.Errorf("failed to create searcher: %w", err)
+			}
+
 			if updateDataOnStartup {
 				if metadataPath == "" {
 					return fmt.Errorf("no METADATA_PATH specified")
@@ -61,6 +66,10 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 					if err := store.InitDB(logger, metadataPath, conn); err != nil {
 						logger.Error("failed to update db", slog.String("err", err.Error()))
 					}
+					logger.Info("Refresh index snapshot...")
+					if err := searcher.RefreshIndex(); err != nil {
+						logger.Error("failed to refresh index snapshot", slog.String("err", err.Error()))
+					}
 				}
 				if _, err := os.Stat(indexPath); err == nil {
 					logger.Info("Index exists, performing async update")
@@ -75,11 +84,6 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 						logger.Error("failed to stat index path", slog.String("err", err.Error()))
 					}
 				}
-			}
-
-			reader, err := bluge.OpenReader(bluge.DefaultConfig(indexPath))
-			if err != nil {
-				return fmt.Errorf("failed to open index: %w", err)
 			}
 
 			logger.Info("Creating discord session...")
@@ -113,7 +117,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			bot, err := discord.NewBot(
 				logger,
 				session,
-				search.NewBlugeSearch(reader),
+				searcher,
 				mediaCache,
 				mediaPath,
 				botUsername,
