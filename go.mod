@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/AssemblyAI/assemblyai-go-sdk v1.8.1 // indirect
 	github.com/RoaringBitmap/roaring v0.9.4 // indirect
 	github.com/aws/aws-sdk-go v1.38.20 // indirect
 	github.com/axiomhq/hyperloglog v0.0.0-20191112132149-a4c4c47bc57f // indirect
@@ -29,9 +30,11 @@ require (
 	github.com/blugelabs/ice v1.0.0 // indirect
 	github.com/blugelabs/ice/v2 v2.0.1 // indirect
 	github.com/caio/go-tdigest v3.1.0+incompatible // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -54,4 +57,5 @@ require (
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
+	nhooyr.io/websocket v1.8.7 // indirect
 )

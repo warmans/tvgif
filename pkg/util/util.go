@@ -22,6 +22,14 @@ func ToPtr[T any](v T) *T {
 	return &v
 }
 
+func FromPtr[T any](v *T) T {
+	if v == nil {
+		var empty T
+		return empty
+	}
+	return *v
+}
+
 func ParseSeriesAndEpisodeFromFileName(filePatternRegex *regexp.Regexp, filename string) (int64, int64, error) {
 
 	match := filePatternRegex.FindStringSubmatch(filename)

@@ -133,6 +133,7 @@ func populateIndex(metaFilePath string, writer *bluge.Writer) error {
 				doc.AddField(mapped)
 			}
 		}
+		batch.Delete(doc.ID())
 		batch.Update(doc.ID(), doc)
 	}
 	if err := writer.Batch(batch); err != nil {

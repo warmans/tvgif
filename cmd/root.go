@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	transcribe "github.com/warmans/tvgif/cmd/aisrt"
 	"github.com/warmans/tvgif/cmd/bot"
 	"github.com/warmans/tvgif/cmd/importer"
 	"github.com/warmans/tvgif/cmd/search"
@@ -26,5 +27,6 @@ func Execute(logger *slog.Logger) error {
 	rootCmd.AddCommand(search.NewSearchCommand(logger))
 	rootCmd.AddCommand(bot.NewBotCommand(logger))
 	rootCmd.AddCommand(tools.NewToolsCommand(logger))
+	rootCmd.AddCommand(transcribe.NewRootCommand(logger))
 	return rootCmd.Execute()
 }

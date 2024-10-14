@@ -80,6 +80,7 @@ func (w *BlugeRefresher) Refresh() error {
 			w.logger.Info("Index does not exist, performing sync update")
 			updateFn()
 		} else {
+			w.refreshing.Unlock()
 			return fmt.Errorf("failed to stat index path: %w", err)
 		}
 	}
