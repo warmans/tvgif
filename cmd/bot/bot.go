@@ -8,6 +8,7 @@ import (
 	"github.com/warmans/tvgif/pkg/discord"
 	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/flag"
+	"github.com/warmans/tvgif/pkg/importer"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/store"
@@ -15,7 +16,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"time"
 )
 
 func NewBotCommand(logger *slog.Logger) *cobra.Command {
@@ -46,6 +46,9 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := conn.Migrate(); err != nil {
+				panic(err.Error())
+			}
 			if indexPath == "" {
 				return fmt.Errorf("no INDEX_PATH specified")
 			}
@@ -55,22 +58,18 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create searcher: %w", err)
 			}
 
-			refresher := search.NewBlugeRefresher(
-				metadataPath,
+			importWorker := importer.NewIncrementalImporter(
 				mediaPath,
-				indexPath,
-				searcher,
+				metadataPath,
 				conn,
+				searcher,
 				logger,
 			)
-
-			if updateDataOnStartup {
-				if err := refresher.Refresh(); err != nil {
-					logger.Error("initial refresh failed", slog.String("err", err.Error()))
+			go func() {
+				if err := importWorker.Start(ctx); err != nil {
+					panic("importer failed " + err.Error())
 				}
-			}
-
-			go refresher.Schedule(ctx, time.Minute*5)
+			}()
 
 			logger.Info("Creating discord session...")
 			if discordToken == "" {

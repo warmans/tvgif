@@ -7,7 +7,6 @@ import (
 	aai "github.com/AssemblyAI/assemblyai-go-sdk"
 	"github.com/pkg/errors"
 	"log/slog"
-	"net/http"
 	"os"
 )
 
@@ -19,9 +18,8 @@ func NewClient(logger *slog.Logger, apiKey string) *Client {
 }
 
 type Client struct {
-	httpClient *http.Client
-	apiKey     string
-	logger     *slog.Logger
+	apiKey string
+	logger *slog.Logger
 }
 
 func (c *Client) Transcribe(ctx context.Context, mp3Path string, outputPath string) error {

@@ -2,13 +2,16 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/blugelabs/bluge"
 	search2 "github.com/blugelabs/bluge/search"
+	metaModel "github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/search/model"
 	"github.com/warmans/tvgif/pkg/searchterms"
 	"github.com/warmans/tvgif/pkg/searchterms/bluge_query"
 	"github.com/warmans/tvgif/pkg/util"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -62,6 +65,9 @@ type BlugeSearch struct {
 }
 
 func (b *BlugeSearch) RefreshIndex() error {
+	if _, err := os.Stat(b.indexPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	b.indexReadLock.Lock()
 	defer b.indexReadLock.Unlock()
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(b.indexPath))
@@ -70,7 +76,6 @@ func (b *BlugeSearch) RefreshIndex() error {
 	}
 	b.index = reader
 	return nil
-
 }
 
 func (b *BlugeSearch) withSnapshot(fn func(r *bluge.Reader) error) error {
@@ -215,4 +220,70 @@ func scanDocument(match *search2.DocumentMatch) (*model.DialogDocument, error) {
 		return nil, err
 	}
 	return cur, nil
+}
+
+func scanID(match *search2.DocumentMatch) (string, error) {
+	var id string
+	err := match.VisitStoredFields(func(field string, value []byte) bool {
+		if field == "_id" {
+			id = string(value)
+			return false
+		}
+		return true
+	})
+	return id, err
+}
+
+func (b *BlugeSearch) Import(ctx context.Context, meta *metaModel.Episode, deleteFirst bool) error {
+	b.indexReadLock.Lock()
+	defer b.indexReadLock.Unlock()
+	blugeWriter, err := bluge.OpenWriter(bluge.DefaultConfig(b.indexPath))
+	if err != nil {
+		return err
+	}
+	defer blugeWriter.Close()
+
+	if deleteFirst {
+		if err := b.ClearEpisodeDialog(ctx, blugeWriter, meta.ID()); err != nil {
+			return err
+		}
+	}
+
+	if err := AddDocsToIndex(DocumentsFromModel(meta), blugeWriter); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *BlugeSearch) ClearEpisodeDialog(ctx context.Context, blugeWriter *bluge.Writer, episodeId string) error {
+	if b.index == nil {
+		// database hasn't been initialized yet so there cannot be any dialog to clear anyway
+		return nil
+	}
+	term := bluge.NewTermQuery(episodeId)
+	term.SetField("episode_id")
+	iterator, err := b.index.Search(ctx, bluge.NewAllMatches(term))
+	if err != nil {
+		return err
+	}
+
+	batch := bluge.NewBatch()
+	for {
+		match, err := iterator.Next()
+		if err != nil {
+			return err
+		}
+		if match == nil {
+			break
+		}
+		documentID, err := scanID(match)
+		if err != nil {
+			return err
+		}
+
+		doc := bluge.NewDocument(documentID)
+		batch.Delete(doc.ID())
+	}
+
+	return blugeWriter.Batch(batch)
 }

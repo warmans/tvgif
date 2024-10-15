@@ -36,6 +36,9 @@ func NewConn(cfg *Config) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+		return nil, err
+	}
 	return &Conn{Db: db}, nil
 }
 

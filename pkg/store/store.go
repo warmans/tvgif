@@ -1,10 +1,21 @@
 package store
 
 import (
+	"database/sql"
+	"errors"
 	"github.com/jmoiron/sqlx"
 	"github.com/warmans/tvgif/pkg/model"
+	"github.com/warmans/tvgif/pkg/util"
 	"strings"
+	"time"
 )
+
+type UpsertResult string
+
+const UpsertResultNone UpsertResult = ""
+const UpsertResultCreated UpsertResult = "created"
+const UpsertResultUpdated UpsertResult = "updated"
+const UpsertResultNoop UpsertResult = "noop"
 
 type DB interface {
 	sqlx.Queryer
@@ -118,4 +129,65 @@ func (s *SRTStore) ListPublications() ([]model.Publication, error) {
 		publications = append(publications, row)
 	}
 	return publications, nil
+}
+
+func (s *SRTStore) ManifestAdd(srtFilename string, srtModTime time.Time) (UpsertResult, error) {
+
+	var originalModTime *time.Time
+	err := s.conn.QueryRowx(`SELECT srt_mod_time FROM manifest WHERE srt_file = $1`, srtFilename).Scan(&originalModTime)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return UpsertResultNone, err
+		}
+	}
+	if originalModTime != nil {
+		if util.FromPtr(originalModTime).Equal(srtModTime) {
+			return UpsertResultNoop, nil
+		}
+	}
+	_, err = s.conn.Exec(
+		`
+		INSERT INTO manifest (srt_file, srt_mod_time) VALUES ($1, $2)
+		ON CONFLICT DO UPDATE SET srt_mod_time=$2
+		`,
+		srtFilename,
+		srtModTime,
+	)
+	if err != nil {
+		return UpsertResultNone, err
+	}
+	// mod time didn't match so upsert was triggered
+	if originalModTime != nil && srtModTime.After(util.FromPtr(originalModTime)) {
+		return UpsertResultUpdated, nil
+	}
+
+	return UpsertResultCreated, nil
+}
+
+func (s *SRTStore) GetManifest() (map[string]time.Time, error) {
+
+	results, err := s.conn.Queryx(`SELECT srt_file, srt_mod_time FROM manifest`)
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close()
+
+	manifest := make(map[string]time.Time)
+	for results.Next() {
+		if err := results.Err(); err != nil {
+			return nil, err
+		}
+		var filePath string
+		var modTime *time.Time
+		if err := results.Scan(&filePath, &modTime); err != nil {
+			return nil, err
+		}
+
+		manifest[filePath] = util.FromPtr(modTime)
+	}
+	return manifest, nil
+}
+
+type ImportStore struct {
+	conn *sqlx.DB
 }

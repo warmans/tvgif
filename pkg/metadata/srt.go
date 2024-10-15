@@ -11,14 +11,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var filePatternRegex = regexp.MustCompile(`(?P<publication>[a-zA-Z0-9]+)-S(?P<series>\d+)E(?P<episode>\d+)\.srt`)
 
 const videoExtension = ".webm"
 
-func CreateMetadataFromSRT(srtPath, metadataDir string) (string, time.Time, error) {
+func CreateMetadataFromSRT(srtPath, metadataDir string) (*model.Episode, error) {
 
 	srtName := path.Base(srtPath)
 
@@ -29,18 +28,20 @@ func CreateMetadataFromSRT(srtPath, metadataDir string) (string, time.Time, erro
 	var err error
 	meta.Publication, meta.Series, meta.Episode, err = parseFileName(filePatternRegex, srtName)
 	if err != nil {
-		return "", time.Time{}, err
-	}
-	var modTime time.Time
-	meta.Dialog, modTime, err = parseSRT(srtPath)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to process SRT %s: %w", srtName, err)
+		return nil, err
 	}
 	fileName := fmt.Sprintf("%s.json", meta.ID())
-	if err := writeMetadata(path.Join(metadataDir, fileName), meta); err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to write metadata: %w", err)
+	metaPath := path.Join(metadataDir, fileName)
+
+	meta.Dialog, err = parseSRT(srtPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process SRT %s: %w", srtName, err)
 	}
-	return fileName, modTime, nil
+
+	if err := writeMetadata(metaPath, meta); err != nil {
+		return nil, fmt.Errorf("failed to write metadata: %w", err)
+	}
+	return meta, nil
 }
 
 func writeMetadata(path string, e *model.Episode) error {
@@ -96,20 +97,16 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	return publication, int32(seriesInt), int32(episodeInt), nil
 }
 
-func parseSRT(filePath string) ([]model.Dialog, time.Time, error) {
+func parseSRT(filePath string) ([]model.Dialog, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to open srt file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to open srt file %s: %w", filePath, err)
 	}
 	defer f.Close()
 
-	fileInfo, err := f.Stat()
-	if err != nil {
-		return nil, time.Time{}, err
-	}
 	dialog, err := srt.Read(f, true, limits.MaxGifDuration)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, err
 	}
-	return dialog, fileInfo.ModTime(), nil
+	return dialog, nil
 }

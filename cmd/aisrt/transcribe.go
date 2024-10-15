@@ -21,6 +21,9 @@ func NewRootCommand(logger *slog.Logger) *cobra.Command {
 	return cmd
 }
 
+// NewMP3Command
+// for this you must extract the mp3 from the video file e.g.
+// ffmpeg -i foo.mp4 foo.mp3
 func NewMP3Command(logger *slog.Logger) *cobra.Command {
 	var (
 		mp3Path       string

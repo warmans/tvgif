@@ -1,3 +1,11 @@
+CREATE TABLE IF NOT EXISTS "manifest"
+(
+    "srt_file"    TEXT,
+    "srt_mod_time" TIMESTAMP
+);
+
+CREATE UNIQUE INDEX unique_srt ON manifest ("srt_file", "srt_mod_time");
+
 CREATE TABLE IF NOT EXISTS "dialog"
 (
     "id"              TEXT PRIMARY KEY,

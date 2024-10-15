@@ -7,40 +7,12 @@ import (
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/blugelabs/bluge/analysis/token"
 	"github.com/blugelabs/bluge/analysis/tokenizer"
-	"github.com/warmans/tvgif/pkg/metadata"
 	"github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/search/mapping"
 	searchModel "github.com/warmans/tvgif/pkg/search/model"
-	"log/slog"
 	"os"
-	"path"
 	"time"
 )
-
-func PopulateIndex(logger *slog.Logger, metadataPath string, indexPath string) error {
-
-	index, err := bluge.OpenWriter(bluge.DefaultConfig(indexPath))
-	if err != nil {
-		return err
-	}
-	defer index.Close()
-
-	return metadata.WithManifest(metadataPath, func(manifest *model.Manifest) error {
-		logger.Info("Populating index...", slog.String("path", metadataPath))
-
-		for metaFileName, meta := range manifest.Episodes {
-			if meta.ImportedIndex {
-				continue
-			}
-			logger.Info("Indexing...", slog.String("name", metaFileName))
-			if err := populateIndex(path.Join(metadataPath, metaFileName), index); err != nil {
-				return err
-			}
-			manifest.Episodes[metaFileName].ImportedIndex = true
-		}
-		return nil
-	})
-}
 
 func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogDocument) (bluge.Field, bool) {
 	switch t {
@@ -102,6 +74,10 @@ func documentsFromMetaFile(filePath string) ([]searchModel.DialogDocument, error
 		return nil, err
 	}
 
+	return DocumentsFromModel(episode), nil
+}
+
+func DocumentsFromModel(episode *model.Episode) []searchModel.DialogDocument {
 	docs := []searchModel.DialogDocument{}
 	for _, v := range episode.Dialog {
 		docs = append(docs, searchModel.DialogDocument{
@@ -117,14 +93,10 @@ func documentsFromMetaFile(filePath string) ([]searchModel.DialogDocument, error
 			Content:        v.Content,
 		})
 	}
-	return docs, nil
+	return docs
 }
 
-func populateIndex(metaFilePath string, writer *bluge.Writer) error {
-	docs, err := documentsFromMetaFile(metaFilePath)
-	if err != nil {
-		return err
-	}
+func AddDocsToIndex(docs []searchModel.DialogDocument, writer *bluge.Writer) error {
 	batch := bluge.NewBatch()
 	for _, d := range docs {
 		doc := bluge.NewDocument(d.ID)
@@ -136,8 +108,5 @@ func populateIndex(metaFilePath string, writer *bluge.Writer) error {
 		batch.Delete(doc.ID())
 		batch.Update(doc.ID(), doc)
 	}
-	if err := writer.Batch(batch); err != nil {
-		return err
-	}
-	return nil
+	return writer.Batch(batch)
 }

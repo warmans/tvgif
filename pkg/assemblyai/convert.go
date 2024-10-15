@@ -70,10 +70,6 @@ func isSentenceEnd(word string) bool {
 	return false
 }
 
-func wordDuration(word aai.TranscriptWord) time.Duration {
-	return wordEnd(word) - wordStart(word)
-}
-
 func wordStart(word aai.TranscriptWord) time.Duration {
 	return time.Duration(util.FromPtr(word.Start)) * time.Millisecond
 }
