@@ -1,7 +1,6 @@
 package search
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
@@ -10,7 +9,6 @@ import (
 	"github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/search/mapping"
 	searchModel "github.com/warmans/tvgif/pkg/search/model"
-	"os"
 	"time"
 )
 
@@ -57,24 +55,6 @@ func getMappedField(fieldName string, t mapping.FieldType, d searchModel.DialogD
 	}
 	// just use text for everything else
 	return bluge.NewTextField(fieldName, fmt.Sprintf("%v", d.GetNamedField(fieldName))).SearchTermPositions().StoreValue(), true
-}
-
-func documentsFromMetaFile(filePath string) ([]searchModel.DialogDocument, error) {
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
-	}
-	defer f.Close()
-
-	episode := &model.Episode{}
-
-	decoder := json.NewDecoder(f)
-	if err := decoder.Decode(episode); err != nil {
-		return nil, err
-	}
-
-	return DocumentsFromModel(episode), nil
 }
 
 func DocumentsFromModel(episode *model.Episode) []searchModel.DialogDocument {

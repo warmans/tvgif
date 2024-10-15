@@ -187,7 +187,3 @@ func (s *SRTStore) GetManifest() (map[string]time.Time, error) {
 	}
 	return manifest, nil
 }
-
-type ImportStore struct {
-	conn *sqlx.DB
-}

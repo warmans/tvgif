@@ -3,7 +3,6 @@ package importer
 import (
 	"context"
 	"fmt"
-	"github.com/blugelabs/bluge"
 	"github.com/fsnotify/fsnotify"
 	"github.com/jmoiron/sqlx"
 	"github.com/warmans/tvgif/pkg/metadata"
@@ -42,7 +41,6 @@ type Incremental struct {
 	metadataDir string
 	conn        *store.Conn
 	searcher    *search.BlugeSearch
-	indexWriter *bluge.Writer
 	logger      *slog.Logger
 }
 
