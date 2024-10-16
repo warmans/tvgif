@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const filePollingInterval = time.Second * 10
+
 type pendingFile struct {
 	srtFilePath string
 	modTime     time.Time
@@ -26,31 +28,51 @@ func NewIncrementalImporter(
 	conn *store.Conn,
 	searcher *search.BlugeSearch,
 	logger *slog.Logger,
+	useFilePolling bool,
 ) *Incremental {
 	return &Incremental{
-		srtDir:      srtDir,
-		metadataDir: metadataDir,
-		conn:        conn,
-		searcher:    searcher,
-		logger:      logger,
+		srtDir:         srtDir,
+		metadataDir:    metadataDir,
+		conn:           conn,
+		searcher:       searcher,
+		logger:         logger,
+		useFilePolling: useFilePolling,
 	}
 }
 
 type Incremental struct {
-	srtDir      string
-	metadataDir string
-	conn        *store.Conn
-	searcher    *search.BlugeSearch
-	logger      *slog.Logger
+	srtDir         string
+	metadataDir    string
+	conn           *store.Conn
+	searcher       *search.BlugeSearch
+	logger         *slog.Logger
+	useFilePolling bool
 }
 
 func (i *Incremental) Start(ctx context.Context) error {
 
 	i.logger.Info("Starting initial file sync...")
-	if err := i.initialFileImport(ctx); err != nil {
+	if err := i.importAllNew(ctx); err != nil {
 		return err
 	}
 
+	i.logger.Info("Starting incremental file sync...", slog.Bool("polling", i.useFilePolling))
+	if i.useFilePolling {
+		return i.startFilePolling(ctx)
+	}
+	return i.startFileWatch(ctx)
+}
+
+func (i *Incremental) startFilePolling(ctx context.Context) error {
+	for {
+		time.Sleep(filePollingInterval)
+		if err := i.importAllNew(ctx); err != nil {
+			return err
+		}
+	}
+}
+
+func (i *Incremental) startFileWatch(ctx context.Context) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -101,24 +123,22 @@ func (i *Incremental) Start(ctx context.Context) error {
 	}()
 
 	// Add a path.
-	i.logger.Info("Starting incremental file sync...")
 	err = watcher.Add(i.srtDir)
 	if err != nil {
 		return err
 	}
 
-	// Block main goroutine forever.
-	<-make(chan struct{})
+	<-ctx.Done()
+
 	return nil
 }
 
-func (i *Incremental) initialFileImport(ctx context.Context) error {
+func (i *Incremental) importAllNew(ctx context.Context) error {
 	manifest, err := store.NewSRTStore(i.conn.Db).GetManifest()
 	if err != nil {
 		return err
 	}
 
-	i.logger.Info("Scanning media dir...", slog.String("dir", i.srtDir))
 	dirEntries, err := os.ReadDir(i.srtDir)
 	if err != nil {
 		return err
@@ -150,7 +170,11 @@ func (i *Incremental) initialFileImport(ctx context.Context) error {
 			toImport = append(toImport, pendingFile{srtFilePath: path.Join(i.srtDir, v.Name()), modTime: inf.ModTime()})
 		}
 	}
-	i.logger.Info("Importing files...", slog.Int("num_files", len(toImport)))
+	if len(toImport) == 0 {
+		return nil
+	}
+
+	i.logger.Info("Importing files...", slog.Int("num_files", len(toImport)), slog.String("dir", i.srtDir))
 	if err := i.importNewSRT(ctx, toImport); err != nil {
 		i.logger.Error(
 			"Failed to import pending files",
@@ -185,7 +209,7 @@ func (i *Incremental) importNewSRT(ctx context.Context, pendingFiles []pendingFi
 				return err
 			}
 
-			logger.Info("Import to index...", slog.String("result", string(result)))
+			logger.Info("Import to index...", slog.String("result", string(result)), slog.Float64("progress", float64(k)/float64(len(pendingFiles))*100))
 			return i.searcher.Import(ctx, meta, result == store.UpsertResultUpdated)
 		})
 		if err != nil {

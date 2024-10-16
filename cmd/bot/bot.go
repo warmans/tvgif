@@ -25,7 +25,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	var discordToken string
 	var botUsername string
 
-	var updateDataOnStartup bool
+	var useFilePolling bool
 	var indexPath string
 	var dbCfg = &store.Config{}
 	var metadataPath string
@@ -64,6 +64,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				conn,
 				searcher,
 				logger,
+				useFilePolling,
 			)
 			go func() {
 				if err := importWorker.Start(ctx); err != nil {
@@ -133,7 +134,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	flag.StringVarEnv(cmd.Flags(), &cachePath, "", "cache-path", "", "path to cache dir")
 	flag.StringVarEnv(cmd.Flags(), &botUsername, "", "bot-username", "tvgif", "bot username and differentiator, used to determine if a message belongs to the bot e.g. tvgif#213")
 
-	flag.BoolVarEnv(cmd.Flags(), &updateDataOnStartup, "", "update-data-on-startup", true, "automatically create indexes and metadata from the media dir when bot starts")
+	flag.BoolVarEnv(cmd.Flags(), &useFilePolling, "", "use-file-polling", true, "instead of relying on filesystem events just poll for changes")
 	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")
 	flag.StringVarEnv(cmd.Flags(), &metadataPath, "", "metadata-path", "./var/metadata", "path to metadata files")
 
