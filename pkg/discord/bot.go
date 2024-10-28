@@ -329,7 +329,7 @@ func (b *Bot) deletePost(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		return
 	}
-	if results[1] != uniqueUser(i.Member) {
+	if results[1] != uniqueUser(i.Member, i.User) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -380,10 +380,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		username := "unknown"
-		if i.Member != nil {
-			username = uniqueUser(i.Member)
-		}
+		username := uniqueUser(i.Member, i.User)
 		customID, err := parseCustomIDPayload(result.ID)
 		if err != nil {
 			b.respondError(s, i, fmt.Errorf("invalid selection"))
@@ -466,10 +463,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
 	b.logger.Info("Editing...")
-	username := "unknown"
-	if i.Member != nil {
-		username = uniqueUser(i.Member)
-	}
+	username := uniqueUser(i.Member, i.User)
 
 	terms := "unknown"
 	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
@@ -955,10 +949,9 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
 		return
 	}
-	username := "unknown"
-	if i.Member != nil {
-		username = uniqueUser(i.Member)
-	}
+
+	username := uniqueUser(i.Member, i.User)
+
 	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
 		b.respondError(
@@ -997,10 +990,7 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
 		return
 	}
-	username := "unknown"
-	if i.Member != nil {
-		username = uniqueUser(i.Member)
-	}
+	username := uniqueUser(i.Member, i.User)
 	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
 		b.respondError(
@@ -1411,8 +1401,15 @@ func lineLength(line []string) int {
 	return total + (len(line) - 1)
 }
 
-func uniqueUser(m *discordgo.Member) string {
-	return m.DisplayName() + " (" + shortID(m.User.ID) + ")"
+func uniqueUser(m *discordgo.Member, u *discordgo.User) string {
+	userName := "unknown"
+	if m != nil {
+		userName = m.DisplayName()
+	}
+	if userName == "" && u != nil {
+		userName = u.Username
+	}
+	return userName + " (" + shortID(m.User.ID) + ")"
 }
 
 func shortID(longID string) string {
