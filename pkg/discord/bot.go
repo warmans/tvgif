@@ -383,7 +383,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		username := uniqueUser(i.Member, i.User)
 		customID, err := parseCustomIDPayload(result.ID)
 		if err != nil {
-			b.respondError(s, i, fmt.Errorf("invalid selection"))
+			b.respondError(s, i, fmt.Errorf("invalid selection: %s", result.ID))
 			return
 		}
 		dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
@@ -401,6 +401,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			b.respondError(s, i, fmt.Errorf("no dialog was selected"), slog.String("custom_id", customID.String()))
 			return
 		}
+		b.logger.Info("Creating...", slog.String("custom_id", customID.String()))
 		if err := b.createGifPreview(s, i, dialog, username, customID, result.Terms); err != nil {
 			b.logger.Error("Failed to begin video response", slog.String("err", err.Error()))
 		}
@@ -462,7 +463,7 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
-	b.logger.Info("Editing...")
+	b.logger.Info("Editing...", slog.String("custom_id", customIDPayload))
 	username := uniqueUser(i.Member, i.User)
 
 	terms := "unknown"
@@ -473,7 +474,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 
 	customID, err := parseCustomIDPayload(customIDPayload)
 	if err != nil {
-		b.respondError(s, i, fmt.Errorf("failed to parse customID: %w", err))
+		b.respondError(s, i, fmt.Errorf("failed to parse customID (%s): %w", customIDPayload, err))
 		return
 	}
 
@@ -666,7 +667,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		return nil, err
 	}
 
-	dialogDuration := (dialog[len(dialog)-1].EndTimestamp - dialog[0].StartTimestamp) + customID.ExtendOrTrim
+	dialogDuration := (dialog[len(dialog)-1].EndTimestamp - dialog[0].StartTimestamp) + customID.Opts.ExtendOrTrim
 
 	navigateButtons := []discordgo.MessageComponent{}
 	if len(before) > 0 {
@@ -682,7 +683,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		//		},
 		//		Style:    discordgo.SecondaryButton,
 		//		Disabled: false,
-		//		CustomID: encodeAction(ActionUpdatePreview, customID.WithStartPosition(prevCustomID.StartPosition)),
+		//		CustomID: encodeAction(ActionUpdatePreview, customID.WithStartPosition(prevcustomID.Opts.StartPosition)),
 		//	})
 		//}
 		navigateButtons = append(navigateButtons, discordgo.Button{
@@ -731,7 +732,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(0-(time.Second*5)))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Opts.Shift+(0-(time.Second*5)))),
 		},
 		discordgo.Button{
 			Label: "1s",
@@ -740,7 +741,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(0-time.Second))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Opts.Shift+(0-time.Second))),
 		},
 		discordgo.Button{
 			Label: "0.5s",
@@ -749,7 +750,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(time.Second/2))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Opts.Shift+(time.Second/2))),
 		},
 		discordgo.Button{
 			Label: "1s",
@@ -758,7 +759,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+time.Second)),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Opts.Shift+time.Second)),
 		},
 		discordgo.Button{
 			Label: "5s",
@@ -767,7 +768,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Shift+(time.Second*5))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithShift(customID.Opts.Shift+(time.Second*5))),
 		},
 	}
 	extendButtons := []discordgo.MessageComponent{}
@@ -779,7 +780,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second/2))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim+(time.Second/2))),
 		})
 	}
 	if dialogDuration+time.Second <= limits.MaxGifDuration {
@@ -790,7 +791,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+time.Second)),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim+time.Second)),
 		})
 	}
 	if dialogDuration+(time.Second*5) <= limits.MaxGifDuration {
@@ -801,7 +802,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second*5))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim+(time.Second*5))),
 		})
 	}
 	if dialogDuration+(time.Second*10) <= limits.MaxGifDuration {
@@ -812,7 +813,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim+(time.Second*10))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim+(time.Second*10))),
 		})
 	}
 	trimButtons := []discordgo.MessageComponent{}
@@ -824,7 +825,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-(time.Second/2))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim-(time.Second/2))),
 		})
 	}
 	if dialogDuration-time.Second > 0 {
@@ -835,7 +836,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-time.Second)),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim-time.Second)),
 		})
 	}
 	if dialogDuration-(time.Second*5) > 0 {
@@ -846,7 +847,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.ExtendOrTrim-(time.Second*5))),
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim-(time.Second*5))),
 		})
 	}
 
@@ -866,6 +867,55 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		})
 	}
 
+	//const panIncrement = 75
+	//stickerButtons := []discordgo.MessageComponent{}
+	//if customID.Opts.Sticker != nil {
+	//	if customID.Opts.Sticker.X+panIncrement <= 596 {
+	//		stickerButtons = append(stickerButtons, discordgo.Button{
+	//			Label: fmt.Sprintf("%dpx", panIncrement),
+	//			Emoji: &discordgo.ComponentEmoji{
+	//				Name: "➡",
+	//			},
+	//			Style:    discordgo.SecondaryButton,
+	//			Disabled: false,
+	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(panIncrement)),
+	//		})
+	//	}
+	//	if customID.Opts.Sticker.X-panIncrement >= 0 {
+	//		stickerButtons = append(stickerButtons, discordgo.Button{
+	//			Label: fmt.Sprintf("%dpx", panIncrement),
+	//			Emoji: &discordgo.ComponentEmoji{
+	//				Name: "⬅",
+	//			},
+	//			Style:    discordgo.SecondaryButton,
+	//			Disabled: false,
+	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(0-panIncrement)),
+	//		})
+	//	}
+	//	if customID.Opts.Sticker.Y+panIncrement <= 336 {
+	//		stickerButtons = append(stickerButtons, discordgo.Button{
+	//			Label: fmt.Sprintf("%dpx", panIncrement),
+	//			Emoji: &discordgo.ComponentEmoji{
+	//				Name: "⬇",
+	//			},
+	//			Style:    discordgo.SecondaryButton,
+	//			Disabled: false,
+	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(panIncrement)),
+	//		})
+	//	}
+	//	if customID.Opts.Sticker.Y-panIncrement >= 0 {
+	//		stickerButtons = append(stickerButtons, discordgo.Button{
+	//			Label: fmt.Sprintf("%dpx", panIncrement),
+	//			Emoji: &discordgo.ComponentEmoji{
+	//				Name: "⬆",
+	//			},
+	//			Style:    discordgo.SecondaryButton,
+	//			Disabled: false,
+	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(0-panIncrement)),
+	//		})
+	//	}
+	//}
+
 	actions := []discordgo.MessageComponent{}
 	if len(navigateButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: navigateButtons})
@@ -879,6 +929,9 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 	if len(trimButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: trimButtons})
 	}
+	//if len(stickerButtons) > 0 {
+	//	actions = append(actions, discordgo.ActionsRow{Components: stickerButtons})
+	//}
 	actions = append(actions, discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.Button{
@@ -906,6 +959,19 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 				Disabled: false,
 				// CustomID is a thing telling Discord which data to send when this button will be pressed.
 				CustomID: encodeAction(ActionOpenCustomTextModal, customID),
+			},
+			discordgo.Button{
+				// Label is what the user will see on the button.
+				Label: ifOr(customID.Opts.Sticker == nil, "Stickerfy", "Unstickerfy"),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "🖼",
+				},
+				// Style provides coloring of the button. There are not so many styles tho.
+				Style: discordgo.SecondaryButton,
+				// Disabled allows bot to disable some buttons for users.
+				Disabled: false,
+				// CustomID is a thing telling Discord which data to send when this button will be pressed.
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithToggleStickerMode()),
 			},
 			discordgo.Button{
 				// Label is what the user will see on the button.
@@ -1094,20 +1160,24 @@ func (b *Bot) buildInteractionResponse(
 		editLabel = " (edited)"
 	}
 	extendLabel := ""
-	if customID.ExtendOrTrim != 0 {
-		if customID.ExtendOrTrim > 0 {
-			extendLabel = fmt.Sprintf("(+%s)", customID.ExtendOrTrim.String())
+	if customID.Opts.ExtendOrTrim != 0 {
+		if customID.Opts.ExtendOrTrim > 0 {
+			extendLabel = fmt.Sprintf("(+%s)", customID.Opts.ExtendOrTrim.String())
 		} else {
-			extendLabel = fmt.Sprintf("(%s)", customID.ExtendOrTrim.String())
+			extendLabel = fmt.Sprintf("(%s)", customID.Opts.ExtendOrTrim.String())
 		}
 	}
 	shiftLabel := ""
-	if customID.Shift != 0 {
-		if customID.Shift > 0 {
-			shiftLabel = fmt.Sprintf("(>>%s)", customID.Shift.String())
+	if customID.Opts.Shift != 0 {
+		if customID.Opts.Shift > 0 {
+			shiftLabel = fmt.Sprintf("(>>%s)", customID.Opts.Shift.String())
 		} else {
-			shiftLabel = fmt.Sprintf("(<<%s)", customID.Shift.String())
+			shiftLabel = fmt.Sprintf("(<<%s)", customID.Opts.Shift.String())
 		}
+	}
+	stickerLabel := ""
+	if customID.Opts.Sticker != nil {
+		stickerLabel = fmt.Sprintf("(sticker)")
 	}
 	originalTerms := ""
 	if opts.originalTerms != "" {
@@ -1117,7 +1187,7 @@ func (b *Bot) buildInteractionResponse(
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n`%s@%s-%s%s%s%s` posted by `%s`%s",
+				"%s\n\n`%s@%s-%s%s%s%s%s` posted by `%s`%s",
 				bodyText,
 				customID.DialogID(),
 				dialog[0].StartTimestamp,
@@ -1125,6 +1195,7 @@ func (b *Bot) buildInteractionResponse(
 				shiftLabel,
 				extendLabel,
 				editLabel,
+				stickerLabel,
 				opts.username,
 				originalTerms,
 			),
@@ -1150,17 +1221,17 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 }
 
 func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *customIdPayload, outputFileType OutputFileType) (*discordgo.File, error) {
-	disableCaching := customID.ExtendOrTrim != 0 || customID.Shift != 0 || customText != nil
+	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || customID.Opts.Sticker != nil
 
 	startTimestamp := dialog[0].StartTimestamp
 	endTimestamp := dialog[len(dialog)-1].EndTimestamp
 
-	if customID.Shift != 0 {
-		startTimestamp += customID.Shift
-		endTimestamp += customID.Shift
+	if customID.Opts.Shift != 0 {
+		startTimestamp += customID.Opts.Shift
+		endTimestamp += customID.Opts.Shift
 	}
-	if customID.ExtendOrTrim != 0 {
-		endTimestamp += customID.ExtendOrTrim
+	if customID.Opts.ExtendOrTrim != 0 {
+		endTimestamp += customID.Opts.ExtendOrTrim
 		if endTimestamp <= startTimestamp {
 			endTimestamp = startTimestamp + time.Second
 		}
@@ -1222,7 +1293,7 @@ func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *
 				Output("pipe:",
 					ffmpeg_go.KwArgs{
 						"format":         "gif",
-						"filter_complex": createDrawtextFilter(dialog, customText),
+						"filter_complex": joinFilters(createDrawtextFilter(dialog, customText, customID.Opts), createCropFilter(customID.Opts), createResizeFilter(customID.Opts)),
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {
@@ -1419,7 +1490,10 @@ func shortID(longID string) string {
 	return longID[len(longID)-6:]
 }
 
-func createDrawtextFilter(dialog []model2.Dialog, customText []string) string {
+func createDrawtextFilter(dialog []model2.Dialog, customText []string, opts customIdOpts) string {
+	if opts.Sticker != nil {
+		return ""
+	}
 	drawTextCommands := []string{}
 	timestampOffsets := dialog[0].StartTimestamp
 	for k, line := range dialog {
@@ -1436,5 +1510,58 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string) string {
 			endSecond.Seconds(),
 		))
 	}
-	return fmt.Sprintf("[0:v]%s", strings.Join(drawTextCommands, ", "))
+	return fmt.Sprintf("%s", strings.Join(drawTextCommands, ", "))
+}
+
+func createCropFilter(opts customIdOpts) string {
+	if opts.Sticker == nil {
+		return ""
+	}
+	//return fmt.Sprintf("crop=w=160:h=160:x=%d:y=%d", positiveOrZero(opts.Sticker.X), positiveOrZero(opts.Sticker.Y))
+	return fmt.Sprintf("crop=w=336:h=336")
+}
+
+func createResizeFilter(opts customIdOpts) string {
+	if opts.Sticker == nil {
+		return ""
+	}
+	return fmt.Sprintf("scale=160:160")
+}
+
+func joinFilters(filters ...string) string {
+	out := ""
+	filters = dropEmptyFilters(filters)
+	for k, v := range filters {
+		connector := ";"
+		if k < len(filters)-1 {
+			connector = fmt.Sprintf("[f%d];[f%d]", k, k)
+		}
+		out += fmt.Sprintf("%s%s", v, connector)
+	}
+	fmt.Println("FILTERS", fmt.Sprintf("[0:v]%s", out))
+	return fmt.Sprintf("[0:v]%s", out)
+}
+
+func dropEmptyFilters(filters []string) []string {
+	clean := []string{}
+	for _, v := range filters {
+		if v != "" {
+			clean = append(clean, v)
+		}
+	}
+	return clean
+}
+
+func positiveOrZero(val int32) int32 {
+	if val < 0 {
+		return 0
+	}
+	return val
+}
+
+func ifOr[T any](test bool, a T, b T) T {
+	if test {
+		return a
+	}
+	return b
 }
