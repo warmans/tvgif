@@ -1531,7 +1531,7 @@ func joinFilters(filters ...string) string {
 	out := ""
 	filters = dropEmptyFilters(filters)
 	for k, v := range filters {
-		connector := ";"
+		connector := ""
 		if k < len(filters)-1 {
 			connector = fmt.Sprintf("[f%d];[f%d]", k, k)
 		}
