@@ -1177,7 +1177,7 @@ func (b *Bot) buildInteractionResponse(
 	}
 	stickerLabel := ""
 	if customID.Opts.Sticker != nil {
-		stickerLabel = fmt.Sprintf("(sticker)")
+		stickerLabel = "(sticker)"
 	}
 	originalTerms := ""
 	if opts.originalTerms != "" {
@@ -1510,22 +1510,21 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, opts cust
 			endSecond.Seconds(),
 		))
 	}
-	return fmt.Sprintf("%s", strings.Join(drawTextCommands, ", "))
+	return strings.Join(drawTextCommands, ", ")
 }
 
 func createCropFilter(opts customIdOpts) string {
 	if opts.Sticker == nil {
 		return ""
 	}
-	//return fmt.Sprintf("crop=w=160:h=160:x=%d:y=%d", positiveOrZero(opts.Sticker.X), positiveOrZero(opts.Sticker.Y))
-	return fmt.Sprintf("crop=w=336:h=336")
+	return "crop=w=336:h=336"
 }
 
 func createResizeFilter(opts customIdOpts) string {
 	if opts.Sticker == nil {
 		return ""
 	}
-	return fmt.Sprintf("scale=160:160")
+	return "scale=160:160"
 }
 
 func joinFilters(filters ...string) string {
@@ -1538,7 +1537,6 @@ func joinFilters(filters ...string) string {
 		}
 		out += fmt.Sprintf("%s%s", v, connector)
 	}
-	fmt.Println("FILTERS", fmt.Sprintf("[0:v]%s", out))
 	return fmt.Sprintf("[0:v]%s", out)
 }
 
