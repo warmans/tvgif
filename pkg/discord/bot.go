@@ -53,7 +53,7 @@ const (
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
-var extractOriginalTerms = regexp.MustCompile(".*original terms: `([^`]+)`")
+var extractOriginalTerms = regexp.MustCompile(".*original terms: `([^`]+)` `#([0-9\\-]+)`")
 
 var rendersInProgress = map[string]string{}
 var renderMutex = sync.RWMutex{}
@@ -72,11 +72,12 @@ func resolveResponseOptions(opts ...responseOption) *responseOptions {
 }
 
 type responseOptions struct {
-	username       string
-	customText     []string
-	outputFileType OutputFileType
-	placeholder    bool
-	originalTerms  string
+	username         string
+	customText       []string
+	outputFileType   OutputFileType
+	placeholder      bool
+	originalTerms    string
+	originalPosition string
 }
 
 type responseOption func(options *responseOptions)
@@ -112,6 +113,12 @@ func withPlaceholder() responseOption {
 func withOriginalTerms(terms string) responseOption {
 	return func(options *responseOptions) {
 		options.originalTerms = terms
+	}
+}
+
+func withOriginalPosition(posRange string) responseOption {
+	return func(options *responseOptions) {
+		options.originalPosition = posRange
 	}
 }
 
@@ -463,12 +470,16 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+	b.updatePreviewWithOptions(s, i, customIDPayload, false)
+}
+
+func (b *Bot) updatePreviewWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string, keepCustomIDPosition bool) {
 	b.logger.Info("Editing...", slog.String("custom_id", customIDPayload))
 	username := uniqueUser(i.Member, i.User)
 
 	terms := "unknown"
 	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
-	if len(foundTerms) == 2 {
+	if len(foundTerms) == 3 {
 		terms = foundTerms[1]
 	}
 
@@ -494,7 +505,19 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 
-	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withOriginalTerms(terms))
+	originalPositionRaw := customID.PositionRange()
+	if len(foundTerms) == 3 && !keepCustomIDPosition {
+		originalPositionRaw = foundTerms[2]
+	}
+
+	interactionResponse, err := b.buildInteractionResponse(
+		dialog,
+		customID,
+		withUsername(username),
+		withPlaceholder(),
+		withOriginalTerms(terms),
+		withOriginalPosition(originalPositionRaw),
+	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			return
@@ -519,7 +542,13 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username), withOriginalTerms(terms))
+		interactionResponse, err = b.buildInteractionResponse(
+			dialog,
+			customID,
+			withUsername(username),
+			withOriginalTerms(terms),
+			withOriginalPosition(originalPositionRaw),
+		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -560,7 +589,14 @@ func (b *Bot) createGifPreview(
 	originalTerms string,
 ) error {
 	// send a placeholder
-	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withOriginalTerms(originalTerms))
+	interactionResponse, err := b.buildInteractionResponse(
+		dialog,
+		customID,
+		withUsername(username),
+		withPlaceholder(),
+		withOriginalTerms(originalTerms),
+		withOriginalPosition(customID.PositionRange()),
+	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
 			fmt.Println("Duplicated interaction")
@@ -582,6 +618,7 @@ func (b *Bot) createGifPreview(
 			customID,
 			withUsername(username),
 			withOriginalTerms(originalTerms),
+			withOriginalPosition(customID.PositionRange()),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -867,57 +904,69 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		})
 	}
 
-	//const panIncrement = 75
-	//stickerButtons := []discordgo.MessageComponent{}
-	//if customID.Opts.Sticker != nil {
-	//	if customID.Opts.Sticker.X+panIncrement <= 596 {
-	//		stickerButtons = append(stickerButtons, discordgo.Button{
-	//			Label: fmt.Sprintf("%dpx", panIncrement),
-	//			Emoji: &discordgo.ComponentEmoji{
-	//				Name: "➡",
-	//			},
-	//			Style:    discordgo.SecondaryButton,
-	//			Disabled: false,
-	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(panIncrement)),
-	//		})
-	//	}
-	//	if customID.Opts.Sticker.X-panIncrement >= 0 {
-	//		stickerButtons = append(stickerButtons, discordgo.Button{
-	//			Label: fmt.Sprintf("%dpx", panIncrement),
-	//			Emoji: &discordgo.ComponentEmoji{
-	//				Name: "⬅",
-	//			},
-	//			Style:    discordgo.SecondaryButton,
-	//			Disabled: false,
-	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(0-panIncrement)),
-	//		})
-	//	}
-	//	if customID.Opts.Sticker.Y+panIncrement <= 336 {
-	//		stickerButtons = append(stickerButtons, discordgo.Button{
-	//			Label: fmt.Sprintf("%dpx", panIncrement),
-	//			Emoji: &discordgo.ComponentEmoji{
-	//				Name: "⬇",
-	//			},
-	//			Style:    discordgo.SecondaryButton,
-	//			Disabled: false,
-	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(panIncrement)),
-	//		})
-	//	}
-	//	if customID.Opts.Sticker.Y-panIncrement >= 0 {
-	//		stickerButtons = append(stickerButtons, discordgo.Button{
-	//			Label: fmt.Sprintf("%dpx", panIncrement),
-	//			Emoji: &discordgo.ComponentEmoji{
-	//				Name: "⬆",
-	//			},
-	//			Style:    discordgo.SecondaryButton,
-	//			Disabled: false,
-	//			CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(0-panIncrement)),
-	//		})
-	//	}
-	//}
+	const panIncrement = 75
+	const widthIncrement = 50
+	stickerButtons := []discordgo.MessageComponent{}
+	if customID.Opts.Sticker != nil {
+		if customID.Opts.Sticker.X+panIncrement <= 596 {
+			stickerButtons = append(stickerButtons, discordgo.Button{
+				Label: fmt.Sprintf("%dpx", panIncrement),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "➡",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(panIncrement)),
+			})
+		}
+		if customID.Opts.Sticker.X-panIncrement >= 0 {
+			stickerButtons = append(stickerButtons, discordgo.Button{
+				Label: fmt.Sprintf("%dpx", panIncrement),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "⬅",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(0-panIncrement)),
+			})
+		}
+		if customID.Opts.Sticker.Y+panIncrement <= 336 {
+			stickerButtons = append(stickerButtons, discordgo.Button{
+				Label: fmt.Sprintf("%dpx", panIncrement),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "⬇",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(panIncrement)),
+			})
+		}
+		if customID.Opts.Sticker.Y-panIncrement >= 0 {
+			stickerButtons = append(stickerButtons, discordgo.Button{
+				Label: fmt.Sprintf("%dpx", panIncrement),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "⬆",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(0-panIncrement)),
+			})
+		}
+		if 336-(customID.Opts.Sticker.WidthOffset-widthIncrement) > 0 {
+			stickerButtons = append(stickerButtons, discordgo.Button{
+				Label: "Zoom",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "↔",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerWidthIncrement(0-widthIncrement)),
+			})
+		}
+	}
 
 	actions := []discordgo.MessageComponent{}
-	if len(navigateButtons) > 0 {
+	if len(navigateButtons) > 0 && customID.Opts.Sticker == nil {
 		actions = append(actions, discordgo.ActionsRow{Components: navigateButtons})
 	}
 	if len(shiftButtons) > 0 {
@@ -929,9 +978,9 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 	if len(trimButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: trimButtons})
 	}
-	//if len(stickerButtons) > 0 {
-	//	actions = append(actions, discordgo.ActionsRow{Components: stickerButtons})
-	//}
+	if len(stickerButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: stickerButtons})
+	}
 	actions = append(actions, discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.Button{
@@ -1181,7 +1230,7 @@ func (b *Bot) buildInteractionResponse(
 	}
 	originalTerms := ""
 	if opts.originalTerms != "" {
-		originalTerms = fmt.Sprintf("\noriginal terms: `%s`", opts.originalTerms)
+		originalTerms = fmt.Sprintf("\noriginal terms: `%s` `#%s`", opts.originalTerms, opts.originalPosition)
 	}
 	return &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -1292,8 +1341,12 @@ func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *
 					}).
 				Output("pipe:",
 					ffmpeg_go.KwArgs{
-						"format":         "gif",
-						"filter_complex": joinFilters(createDrawtextFilter(dialog, customText, customID.Opts), createCropFilter(customID.Opts), createResizeFilter(customID.Opts)),
+						"format": "gif",
+						"filter_complex": joinFilters(
+							createDrawtextFilter(dialog, customText, customID.Opts, withSimpsonsFont(customID.Publication == "simpsons")),
+							createCropFilter(customID.Opts),
+							createResizeFilter(customID.Opts),
+						),
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {
@@ -1392,7 +1445,7 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 		return
 	}
 	foundTerms := extractOriginalTerms.FindStringSubmatch(i.Message.Content)
-	if len(foundTerms) != 2 {
+	if len(foundTerms) != 3 {
 		b.respondError(s, i, fmt.Errorf("failed to extract terms from message"))
 		return
 	}
@@ -1401,6 +1454,8 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 		b.respondError(s, i, fmt.Errorf("failed to parse terms from message"))
 		return
 	}
+	originalPosition := foundTerms[2]
+
 	res, err := b.searcher.Search(context.Background(), terms, search.OverridePageSize(100))
 	if err != nil {
 		b.logger.Error("Failed to fetch autocomplete options", slog.String("err", err.Error()))
@@ -1408,23 +1463,25 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 	}
 	currentSelection := -1
 	for k, v := range res {
-		if v.ID == customID.DialogID() {
+		if v.ID == customID.DialogIDWithRange(originalPosition) {
 			currentSelection = k
 		}
 	}
+
 	var nextSelection int
 	if next {
 		nextSelection = currentSelection + 1
 	} else {
 		nextSelection = currentSelection - 1
 	}
+
 	// no more results or current result not found.
 	if currentSelection == -1 || nextSelection >= len(res) || nextSelection < 0 {
-		b.updatePreview(s, i, customIDPayload)
+		b.updatePreviewWithOptions(s, i, customIDPayload, true)
 		return
 	}
 
-	b.updatePreview(s, i, res[nextSelection].ID)
+	b.updatePreviewWithOptions(s, i, res[nextSelection].ID, true)
 }
 
 func createFileName(customID *customIdPayload, suffix string) string {
@@ -1490,8 +1547,28 @@ func shortID(longID string) string {
 	return longID[len(longID)-6:]
 }
 
-func createDrawtextFilter(dialog []model2.Dialog, customText []string, opts customIdOpts) string {
-	if opts.Sticker != nil {
+type drawTextOpts struct {
+	font       string
+	boxOpacity float32
+}
+
+type drawTextOpt func(opts *drawTextOpts)
+
+func withSimpsonsFont(enable bool) drawTextOpt {
+	return func(opts *drawTextOpts) {
+		if enable {
+			opts.font = "assets/akbar.ttf"
+			opts.boxOpacity = 0
+		}
+	}
+}
+
+func createDrawtextFilter(dialog []model2.Dialog, customText []string, cidOpts customIdOpts, opts ...drawTextOpt) string {
+	options := &drawTextOpts{boxOpacity: 0.5}
+	for _, v := range opts {
+		v(options)
+	}
+	if cidOpts.Sticker != nil {
 		return ""
 	}
 	drawTextCommands := []string{}
@@ -1503,9 +1580,15 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, opts cust
 		}
 		startSecond := line.StartTimestamp - timestampOffsets
 		endSecond := line.EndTimestamp - timestampOffsets
+		font := ""
+		if options.font != "" {
+			font = fmt.Sprintf("fontfile='%s':", options.font)
+		}
 		drawTextCommands = append(drawTextCommands, fmt.Sprintf(
-			`drawtext=text='%s':fontcolor=white:fontsize=16:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10)):enable='between(t,%0.2f,%0.2f)'`,
+			`drawtext=%stext='%s':expansion=none:fontcolor=white:fontsize=18:box=1:boxcolor=black@%0.1f:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10)):enable='between(t,%0.2f,%0.2f):shadowx=2:shadowy=2'`,
+			font,
 			formatGifText(56, strings.Split(dialogText, "\n")),
+			options.boxOpacity,
 			startSecond.Seconds(),
 			endSecond.Seconds(),
 		))
@@ -1516,6 +1599,13 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, opts cust
 func createCropFilter(opts customIdOpts) string {
 	if opts.Sticker == nil {
 		return ""
+	}
+	if opts.Sticker.X > 0 || opts.Sticker.Y > 0 || opts.Sticker.WidthOffset != 0 {
+		diameter := int32(336)
+		if opts.Sticker.WidthOffset != 0 {
+			diameter = 336 + opts.Sticker.WidthOffset
+		}
+		return fmt.Sprintf("crop=w=%d:h=%d:x=%d:y=%d", diameter, diameter, opts.Sticker.X, opts.Sticker.Y)
 	}
 	return "crop=w=336:h=336"
 }

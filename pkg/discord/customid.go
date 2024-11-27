@@ -10,8 +10,9 @@ import (
 )
 
 type stickerOpts struct {
-	X int32 `json:"x"`
-	Y int32 `json:"y"`
+	X           int32 `json:"x"`
+	Y           int32 `json:"y"`
+	WidthOffset int32 `json:"w"`
 }
 
 type customIdOpts struct {
@@ -67,7 +68,11 @@ type customIdPayload struct {
 }
 
 func (c *customIdPayload) DialogID() string {
-	return fmt.Sprintf("%s-%s", c.EpisodeID(), c.PositionRange())
+	return c.DialogIDWithRange(c.PositionRange())
+}
+
+func (c *customIdPayload) DialogIDWithRange(customRange string) string {
+	return fmt.Sprintf("%s-%s", c.EpisodeID(), customRange)
 }
 
 func (c *customIdPayload) EpisodeID() string {
@@ -138,16 +143,27 @@ func (c *customIdPayload) WithStickerXIncrement(increment int32) *customIdPayloa
 	if cp.Opts.Sticker == nil {
 		cp.Opts.Sticker = &stickerOpts{X: positiveOrZero(increment), Y: 0}
 	} else {
-		cp.Opts.Sticker = &stickerOpts{X: positiveOrZero(cp.Opts.Sticker.X + increment), Y: cp.Opts.Sticker.Y}
+		cp.Opts.Sticker = &stickerOpts{X: positiveOrZero(cp.Opts.Sticker.X + increment), Y: cp.Opts.Sticker.Y, WidthOffset: cp.Opts.Sticker.WidthOffset}
 	}
 	return &cp
 }
+
 func (c *customIdPayload) WithStickerYIncrement(increment int32) *customIdPayload {
 	cp := *c
 	if cp.Opts.Sticker == nil {
 		cp.Opts.Sticker = &stickerOpts{X: 0, Y: positiveOrZero(increment)}
 	} else {
-		cp.Opts.Sticker = &stickerOpts{X: cp.Opts.Sticker.X, Y: positiveOrZero(cp.Opts.Sticker.Y + increment)}
+		cp.Opts.Sticker = &stickerOpts{X: cp.Opts.Sticker.X, Y: positiveOrZero(cp.Opts.Sticker.Y + increment), WidthOffset: cp.Opts.Sticker.WidthOffset}
+	}
+	return &cp
+}
+
+func (c *customIdPayload) WithStickerWidthIncrement(increment int32) *customIdPayload {
+	cp := *c
+	if cp.Opts.Sticker == nil {
+		cp.Opts.Sticker = &stickerOpts{X: 0, Y: 0, WidthOffset: increment}
+	} else {
+		cp.Opts.Sticker = &stickerOpts{X: cp.Opts.Sticker.X, Y: cp.Opts.Sticker.Y, WidthOffset: cp.Opts.Sticker.WidthOffset + increment}
 	}
 	return &cp
 }
