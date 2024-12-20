@@ -904,52 +904,53 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		})
 	}
 
-	const panIncrement = 75
+	const panIncrementLarge = 50
+	const panIncrementSmall = 25
 	const widthIncrement = 50
 	stickerButtons := []discordgo.MessageComponent{}
 	if customID.Opts.Sticker != nil {
-		if customID.Opts.Sticker.X+panIncrement <= 596 {
+		if customID.Opts.Sticker.X+panIncrementLarge <= 596 {
 			stickerButtons = append(stickerButtons, discordgo.Button{
-				Label: fmt.Sprintf("%dpx", panIncrement),
+				Label: fmt.Sprintf("%dpx", panIncrementLarge),
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "➡",
 				},
 				Style:    discordgo.SecondaryButton,
 				Disabled: false,
-				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(panIncrement)),
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(panIncrementLarge)),
 			})
 		}
-		if customID.Opts.Sticker.X-panIncrement >= 0 {
+		if customID.Opts.Sticker.X-panIncrementLarge >= 0 {
 			stickerButtons = append(stickerButtons, discordgo.Button{
-				Label: fmt.Sprintf("%dpx", panIncrement),
+				Label: fmt.Sprintf("%dpx", panIncrementSmall),
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "⬅",
 				},
 				Style:    discordgo.SecondaryButton,
 				Disabled: false,
-				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(0-panIncrement)),
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerXIncrement(0-panIncrementSmall)),
 			})
 		}
-		if customID.Opts.Sticker.Y+panIncrement <= 336 {
+		if customID.Opts.Sticker.Y+panIncrementLarge <= 336 {
 			stickerButtons = append(stickerButtons, discordgo.Button{
-				Label: fmt.Sprintf("%dpx", panIncrement),
+				Label: fmt.Sprintf("%dpx", panIncrementLarge),
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "⬇",
 				},
 				Style:    discordgo.SecondaryButton,
 				Disabled: false,
-				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(panIncrement)),
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(panIncrementLarge)),
 			})
 		}
-		if customID.Opts.Sticker.Y-panIncrement >= 0 {
+		if customID.Opts.Sticker.Y-panIncrementLarge >= 0 {
 			stickerButtons = append(stickerButtons, discordgo.Button{
-				Label: fmt.Sprintf("%dpx", panIncrement),
+				Label: fmt.Sprintf("%dpx", panIncrementSmall),
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "⬆",
 				},
 				Style:    discordgo.SecondaryButton,
 				Disabled: false,
-				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(0-panIncrement)),
+				CustomID: encodeAction(ActionUpdatePreview, customID.WithStickerYIncrement(0-panIncrementSmall)),
 			})
 		}
 		if 336-(customID.Opts.Sticker.WidthOffset-widthIncrement) > 0 {
