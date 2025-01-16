@@ -6,6 +6,7 @@ import (
 	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/srt"
+	"github.com/warmans/tvgif/pkg/util"
 	"os"
 	"path"
 	"regexp"
@@ -74,7 +75,7 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	var err error
 	var seriesInt int64
 	if seriesStr, ok := result["series"]; ok && seriesStr != "" {
-		seriesInt, err = strconv.ParseInt(strings.TrimLeft(seriesStr, "0"), 10, 32)
+		seriesInt, err = strconv.ParseInt(util.NormaliseNumericIdentifier(seriesStr), 10, 32)
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("failed to parse matched series int %s: %w", seriesStr, err)
 		}
@@ -83,7 +84,7 @@ func parseFileName(filePatternRegex *regexp.Regexp, filename string) (string, in
 	}
 	var episodeInt int64
 	if episodeStr, ok := result["episode"]; ok && episodeStr != "" {
-		episodeInt, err = strconv.ParseInt(strings.TrimLeft(episodeStr, "0"), 10, 32)
+		episodeInt, err = strconv.ParseInt(util.NormaliseNumericIdentifier(episodeStr), 10, 32)
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("failed to parse matched episode int %s: %w", episodeStr, err)
 		}

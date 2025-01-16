@@ -44,7 +44,8 @@ func ParseSeriesAndEpisodeFromFileName(filePatternRegex *regexp.Regexp, filename
 	var err error
 	var seriesInt int64
 	if seriesStr, ok := result["series"]; ok && seriesStr != "" {
-		seriesInt, err = strconv.ParseInt(strings.TrimLeft(seriesStr, "0"), 10, 64)
+
+		seriesInt, err = strconv.ParseInt(NormaliseNumericIdentifier(seriesStr), 10, 64)
 		if err != nil {
 			return 0, 0, fmt.Errorf("failed to parse matched series int %s: %w", seriesStr, err)
 		}
@@ -53,7 +54,7 @@ func ParseSeriesAndEpisodeFromFileName(filePatternRegex *regexp.Regexp, filename
 	}
 	var episodeInt int64
 	if episodeStr, ok := result["episode"]; ok && episodeStr != "" {
-		episodeInt, err = strconv.ParseInt(strings.TrimLeft(episodeStr, "0"), 10, 64)
+		episodeInt, err = strconv.ParseInt(NormaliseNumericIdentifier(episodeStr), 10, 64)
 		if err != nil {
 			return 0, 0, fmt.Errorf("failed to parse matched episode int %s: %w", episodeStr, err)
 		}
@@ -104,4 +105,12 @@ func ContentToFilename(rawContent string) string {
 		split = split[:8]
 	}
 	return strings.Join(split, "-")
+}
+
+func NormaliseNumericIdentifier(identifier string) string {
+	normalised := strings.TrimLeft(identifier, "0")
+	if normalised == "" {
+		normalised = "0"
+	}
+	return normalised
 }
