@@ -3,6 +3,7 @@ package searchterms
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/warmans/tvgif/pkg/util"
 	"strconv"
 	"strings"
 	"time"
@@ -215,7 +216,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 		if len(parts) == 0 || len(parts) > 2 {
 			return nil, fmt.Errorf("id had an unexpected format: %s", lexme)
 		}
-		series, err := strconv.Atoi(strings.TrimLeft(parts[0], "s0"))
+		series, err := strconv.Atoi(util.NormaliseNumericIdentifier(strings.TrimLeft(parts[0], "s")))
 		if err != nil {
 			return nil, fmt.Errorf("could not parse series '%s' from given id %s", parts[0], lexme)
 		}
@@ -227,7 +228,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 			}}, nil
 		}
 		if len(parts) == 2 {
-			episode, err := strconv.Atoi(strings.TrimLeft(parts[1], "e0"))
+			episode, err := strconv.Atoi(util.NormaliseNumericIdentifier(strings.TrimLeft(parts[1], "e")))
 			if err != nil {
 				return nil, fmt.Errorf("could not parse episode '%s' from given id %s", parts[1], lexme)
 			}
