@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+type Mode string
+
+const (
+	NormalMode  Mode = ""
+	StickerMode Mode = "sticker"
+	CaptionMode Mode = "caption"
+)
+
 type stickerOpts struct {
 	X           int32 `json:"x"`
 	Y           int32 `json:"y"`
@@ -19,6 +27,7 @@ type customIdOpts struct {
 	ExtendOrTrim time.Duration `json:"x"`
 	Shift        time.Duration `json:"s"`
 	Sticker      *stickerOpts  `json:"t"`
+	Mode         Mode          `json:"m"`
 }
 
 func (c *customIdOpts) UnmarshalJSON(bytes []byte) error {
@@ -26,6 +35,7 @@ func (c *customIdOpts) UnmarshalJSON(bytes []byte) error {
 		ExtendOrTrim string       `json:"x"`
 		Shift        string       `json:"s"`
 		Sticker      *stickerOpts `json:"t"`
+		Mode         Mode         `json:"m"`
 	}{}
 
 	if err := json.Unmarshal(bytes, raw); err != nil {
@@ -33,6 +43,7 @@ func (c *customIdOpts) UnmarshalJSON(bytes []byte) error {
 	}
 
 	c.Sticker = raw.Sticker
+	c.Mode = raw.Mode
 
 	var err error
 	c.ExtendOrTrim, err = time.ParseDuration(raw.ExtendOrTrim)
@@ -51,10 +62,12 @@ func (c *customIdOpts) MarshalJSON() ([]byte, error) {
 		ExtendOrTrim string       `json:"x"`
 		Shift        string       `json:"s"`
 		Sticker      *stickerOpts `json:"t"`
+		Mode         Mode         `json:"m"`
 	}{
 		ExtendOrTrim: c.ExtendOrTrim.String(),
 		Shift:        c.Shift.String(),
 		Sticker:      c.Sticker,
+		Mode:         c.Mode,
 	})
 }
 
@@ -128,9 +141,10 @@ func (c *customIdPayload) WithEndPosition(end int64) *customIdPayload {
 	return &cp
 }
 
-func (c *customIdPayload) WithToggleStickerMode() *customIdPayload {
+func (c *customIdPayload) WithMode(mode Mode) *customIdPayload {
 	cp := *c
-	if cp.Opts.Sticker == nil {
+	cp.Opts.Mode = mode
+	if mode == StickerMode {
 		cp.Opts.Sticker = &stickerOpts{X: 0, Y: 0}
 	} else {
 		cp.Opts.Sticker = nil

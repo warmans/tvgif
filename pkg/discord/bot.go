@@ -19,6 +19,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"path"
 	"regexp"
@@ -38,11 +39,13 @@ const (
 type Action string
 
 const (
-	ActionConfirmPostGif      = Action("cfrmg")
-	ActionOpenCustomTextModal = Action("cstm")
-	ActionNextResult          = Action("nxt")
-	ActionPrevResult          = Action("prv")
-	ActionUpdatePreview       = Action("upd")
+	ActionConfirmPostGif            = Action("cfrmg")
+	ActionConfirmPostGifWithCaption = Action("cfrmc")
+	ActionOpenCustomTextModal       = Action("cstm")
+	ActionOpenCaptionModal          = Action("ctm")
+	ActionNextResult                = Action("nxt")
+	ActionPrevResult                = Action("prv")
+	ActionUpdatePreview             = Action("upd")
 )
 
 type OutputFileType string
@@ -78,6 +81,7 @@ type responseOptions struct {
 	placeholder      bool
 	originalTerms    string
 	originalPosition string
+	caption          string
 }
 
 type responseOption func(options *responseOptions)
@@ -119,6 +123,12 @@ func withOriginalTerms(terms string) responseOption {
 func withOriginalPosition(posRange string) responseOption {
 	return func(options *responseOptions) {
 		options.originalPosition = posRange
+	}
+}
+
+func withCaption(caption string) responseOption {
+	return func(options *responseOptions) {
+		options.caption = caption
 	}
 }
 
@@ -208,14 +218,16 @@ func NewBot(
 		string(CommandDelete): bot.deletePost,
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
-		ActionConfirmPostGif:      bot.postGif,
+		ActionConfirmPostGif:      bot.postGifFromPreview,
 		ActionNextResult:          bot.nextResult,
 		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
+		ActionOpenCaptionModal:    bot.captionModal,
 		ActionUpdatePreview:       bot.updatePreview,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
-		ActionConfirmPostGif: bot.postCustomGif,
+		ActionConfirmPostGif:            bot.postCustomGif,
+		ActionConfirmPostGifWithCaption: bot.postGifWithCaption,
 	}
 
 	return bot, nil
@@ -255,6 +267,7 @@ func (b *Bot) Start() error {
 			}
 		case discordgo.InteractionModalSubmit:
 			// prefix match buttons to allow additional data in the customID
+			fmt.Println("Modal submit ", i.ModalSubmitData().CustomID)
 			for k, h := range b.modalHandlers {
 				actionPrefix := fmt.Sprintf("%s:", k)
 				if strings.HasPrefix(i.ModalSubmitData().CustomID, actionPrefix) {
@@ -470,10 +483,16 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
-	b.updatePreviewWithOptions(s, i, customIDPayload, false)
+	b.updatePreviewWithOptions(s, i, customIDPayload, false, "")
 }
 
-func (b *Bot) updatePreviewWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string, keepCustomIDPosition bool) {
+func (b *Bot) updatePreviewWithOptions(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	customIDPayload string,
+	keepCustomIDPosition bool,
+	caption string,
+) {
 	b.logger.Info("Editing...", slog.String("custom_id", customIDPayload))
 	username := uniqueUser(i.Member, i.User)
 
@@ -548,6 +567,7 @@ func (b *Bot) updatePreviewWithOptions(s *discordgo.Session, i *discordgo.Intera
 			withUsername(username),
 			withOriginalTerms(terms),
 			withOriginalPosition(originalPositionRaw),
+			withCaption(caption),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -697,6 +717,39 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, cu
 	}
 }
 
+func (b *Bot) captionModal(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+	customID, err := parseCustomIDPayload(customIDPayload)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("invalid customID"))
+		return
+	}
+
+	fields := []discordgo.MessageComponent{discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.TextInput{
+				CustomID:    "caption",
+				Label:       "Caption",
+				Style:       discordgo.TextInputParagraph,
+				Required:    true,
+				MaxLength:   64,
+				Value:       "",
+				Placeholder: "Caption added to top of image",
+			},
+		},
+	}}
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID:   encodeAction(ActionConfirmPostGifWithCaption, customID),
+			Title:      "Add caption and Post GIF (no preview)",
+			Components: fields,
+		},
+	})
+	if err != nil {
+		b.respondError(s, i, err)
+	}
+}
+
 func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) ([]discordgo.MessageComponent, error) {
 
 	before, after, err := b.srtStore.GetDialogContext(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
@@ -712,17 +765,6 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 		if err != nil {
 			return nil, err
 		}
-		//if dialogDuration+(before[0].EndTimestamp-before[0].StartTimestamp) <= limits.MaxGifDuration && len(dialog) < 5 {
-		//	navigateButtons = append(navigateButtons, discordgo.Button{
-		//		Label: "Merge Previous Subtitle",
-		//		Emoji: &discordgo.ComponentEmoji{
-		//			Name: "➕",
-		//		},
-		//		Style:    discordgo.SecondaryButton,
-		//		Disabled: false,
-		//		CustomID: encodeAction(ActionUpdatePreview, customID.WithStartPosition(prevcustomID.Opts.StartPosition)),
-		//	})
-		//}
 		navigateButtons = append(navigateButtons, discordgo.Button{
 			Label: "Previous Subtitle",
 			Emoji: &discordgo.ComponentEmoji{
@@ -908,7 +950,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 	const panIncrementSmall = 25
 	const widthIncrement = 50
 	stickerButtons := []discordgo.MessageComponent{}
-	if customID.Opts.Sticker != nil {
+	if customID.Opts.Mode == StickerMode {
 		if customID.Opts.Sticker.X+panIncrementLarge <= 596 {
 			stickerButtons = append(stickerButtons, discordgo.Button{
 				Label: fmt.Sprintf("%dpx", panIncrementLarge),
@@ -965,138 +1007,131 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customIdPayload) (
 			})
 		}
 	}
+	captionButtons := []discordgo.MessageComponent{}
+	if customID.Opts.Mode == CaptionMode {
+		captionButtons = append(captionButtons, discordgo.Button{
+			Label:    "Set Caption",
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionOpenCaptionModal, customID),
+		})
+	}
+
+	var modeSelectBtn discordgo.Button
+	switch customID.Opts.Mode {
+	case NormalMode:
+		modeSelectBtn = discordgo.Button{
+			Label: "Next Mode (Sticker)",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🖼",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(StickerMode)),
+		}
+	case StickerMode:
+		modeSelectBtn = discordgo.Button{
+			Label: "Next Mode (Caption)",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🖼",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(CaptionMode)),
+		}
+	default:
+		modeSelectBtn = discordgo.Button{
+			Label: "Next Mode (Normal)",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🖼",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(NormalMode)),
+		}
+	}
+
+	postActions := []discordgo.MessageComponent{discordgo.Button{
+		Label: "Post GIF",
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "✅",
+		},
+		Style:    discordgo.PrimaryButton,
+		Disabled: false,
+		CustomID: encodeAction(ActionConfirmPostGif, customID),
+	}}
+	if customID.Opts.Mode == NormalMode {
+		postActions = append(postActions, discordgo.Button{
+			Label: "Post GIF with Custom Text",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✅",
+			},
+			Style:    discordgo.PrimaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionOpenCustomTextModal, customID),
+		})
+	}
+	postActions = append(postActions,
+		modeSelectBtn,
+		discordgo.Button{
+			Label: "Prev",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "❌",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionPrevResult, customID),
+		},
+		discordgo.Button{
+			Label: "Next",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "❌",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionNextResult, customID),
+		},
+	)
 
 	actions := []discordgo.MessageComponent{}
-	if len(navigateButtons) > 0 && customID.Opts.Sticker == nil {
+	if len(navigateButtons) > 0 && customID.Opts.Mode == NormalMode {
 		actions = append(actions, discordgo.ActionsRow{Components: navigateButtons})
 	}
-	if len(shiftButtons) > 0 {
+	if len(shiftButtons) > 0 && customID.Opts.Mode != CaptionMode {
 		actions = append(actions, discordgo.ActionsRow{Components: shiftButtons})
 	}
-	if len(extendButtons) > 0 {
+	if len(extendButtons) > 0 && customID.Opts.Mode != CaptionMode {
 		actions = append(actions, discordgo.ActionsRow{Components: extendButtons})
 	}
-	if len(trimButtons) > 0 {
+	if len(trimButtons) > 0 && customID.Opts.Mode != CaptionMode {
 		actions = append(actions, discordgo.ActionsRow{Components: trimButtons})
 	}
 	if len(stickerButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: stickerButtons})
 	}
-	actions = append(actions, discordgo.ActionsRow{
-		Components: []discordgo.MessageComponent{
-			discordgo.Button{
-				// Label is what the user will see on the button.
-				Label: "Post GIF",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "✅",
-				},
-				// Style provides coloring of the button. There are not so many styles tho.
-				Style: discordgo.PrimaryButton,
-				// Disabled allows bot to disable some buttons for users.
-				Disabled: false,
-				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeAction(ActionConfirmPostGif, customID),
-			},
-			discordgo.Button{
-				// Label is what the user will see on the button.
-				Label: "Post GIF with Custom Text",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "✅",
-				},
-				// Style provides coloring of the button. There are not so many styles tho.
-				Style: discordgo.PrimaryButton,
-				// Disabled allows bot to disable some buttons for users.
-				Disabled: false,
-				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeAction(ActionOpenCustomTextModal, customID),
-			},
-			discordgo.Button{
-				// Label is what the user will see on the button.
-				Label: ifOr(customID.Opts.Sticker == nil, "Stickerfy", "Unstickerfy"),
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "🖼",
-				},
-				// Style provides coloring of the button. There are not so many styles tho.
-				Style: discordgo.SecondaryButton,
-				// Disabled allows bot to disable some buttons for users.
-				Disabled: false,
-				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeAction(ActionUpdatePreview, customID.WithToggleStickerMode()),
-			},
-			discordgo.Button{
-				// Label is what the user will see on the button.
-				Label: "Prev",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "❌",
-				},
-				// Style provides coloring of the button. There are not so many styles tho.
-				Style: discordgo.SecondaryButton,
-				// Disabled allows bot to disable some buttons for users.
-				Disabled: false,
-				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeAction(ActionPrevResult, customID),
-			},
-			discordgo.Button{
-				// Label is what the user will see on the button.
-				Label: "Next",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "❌",
-				},
-				// Style provides coloring of the button. There are not so many styles tho.
-				Style: discordgo.SecondaryButton,
-				// Disabled allows bot to disable some buttons for users.
-				Disabled: false,
-				// CustomID is a thing telling Discord which data to send when this button will be pressed.
-				CustomID: encodeAction(ActionNextResult, customID),
-			},
-		},
-	})
+	if len(captionButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: captionButtons})
+	}
+	actions = append(actions, discordgo.ActionsRow{Components: postActions})
 
 	return actions, nil
 }
 
 func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
-	if customIDPayload == "" {
-		b.respondError(s, i, fmt.Errorf("missing customID"))
-		return
-	}
-	customID, err := parseCustomIDPayload(customIDPayload)
-	if err != nil {
-		b.respondError(s, i, fmt.Errorf("invalid customID"))
-		return
-	}
-
-	username := uniqueUser(i.Member, i.User)
-
-	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
-	if err != nil {
-		b.respondError(
-			s,
-			i,
-			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
-			slog.String("err", err.Error()),
-			slog.String("custom_id", customIDPayload),
-		)
-		return
-	}
 	var customText []string
 	for k := range i.Interaction.ModalSubmitData().Components {
 		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
 	}
-	if len(dialog) == 0 {
-		b.respondError(s, i, fmt.Errorf("no dialog was selected"))
-		return
-	}
-	if err = b.completeResponse(s, i, dialog, username, customText, customID, false); err != nil {
-		b.respondError(s, i, err)
-	}
+	b.postGifWithOptions(s, i, customIDPayload, customText, "")
 }
 
-func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+func (b *Bot) postGifWithCaption(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
+	caption := i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
+	fmt.Println("update with caption ", caption)
+	b.updatePreviewWithOptions(s, i, customIDPayload, true, caption)
+}
 
-	if i.Type != discordgo.InteractionMessageComponent {
-		return
-	}
+func (b *Bot) postGifFromPreview(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string) {
 	if customIDPayload == "" {
 		b.respondError(s, i, fmt.Errorf("missing customID"))
 		return
@@ -1106,7 +1141,6 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
 		return
 	}
-	username := uniqueUser(i.Member, i.User)
 	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
 	if err != nil {
 		b.respondError(
@@ -1118,7 +1152,65 @@ func (b *Bot) postGif(s *discordgo.Session, i *discordgo.InteractionCreate, cust
 		)
 		return
 	}
-	if err := b.completeResponse(s, i, dialog, username, nil, customID, false); err != nil {
+	var files []*discordgo.File
+	if len(i.Message.Attachments) > 0 {
+		attachment := i.Message.Attachments[0]
+		image, err := http.Get(attachment.URL)
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to get original message attachment: %w", err))
+			return
+		}
+		defer image.Body.Close()
+
+		files = append(files, &discordgo.File{
+			Name:        attachment.Filename,
+			Reader:      image.Body,
+			ContentType: attachment.ContentType,
+		})
+	}
+	interactionResponse := &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: b.gifDescription(
+				customID,
+				uniqueUser(i.Member, i.User),
+				dialog,
+				false,
+			),
+			Files:       files,
+			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
+		},
+	}
+
+	if err := s.InteractionRespond(i.Interaction, interactionResponse); err != nil {
+		b.respondError(s, i, err)
+		return
+	}
+}
+
+func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, customIDPayload string, customText []string, caption string) {
+	if customIDPayload == "" {
+		b.respondError(s, i, fmt.Errorf("missing customID"))
+		return
+	}
+	customID, err := parseCustomIDPayload(customIDPayload)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("invalid customID"))
+		return
+	}
+	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
+	if err != nil {
+		b.respondError(
+			s,
+			i,
+			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+			slog.String("err", err.Error()),
+			slog.String("custom_id", customIDPayload),
+		)
+		return
+	}
+
+	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), customText, customID, false, caption); err != nil {
 		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
 	}
 }
@@ -1131,6 +1223,7 @@ func (b *Bot) completeResponse(
 	customText []string,
 	customID *customIdPayload,
 	video bool,
+	caption string,
 ) error {
 	interactionResponse, err := b.buildInteractionResponse(dialog, customID, withUsername(username), withPlaceholder(), withVideo(video))
 	if err != nil {
@@ -1148,7 +1241,13 @@ func (b *Bot) completeResponse(
 		return fmt.Errorf("failed to respond: %w", err)
 	}
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(dialog, customID, withUsername(username), withCustomText(customText), withVideo(video))
+		interactionResponse, err = b.buildInteractionResponse(
+			dialog,
+			customID,
+			withUsername(username),
+			withCustomText(customText),
+			withVideo(video),
+			withCaption(caption))
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
 				return
@@ -1196,7 +1295,7 @@ func (b *Bot) buildInteractionResponse(
 
 	var bodyText string
 	if !opts.placeholder {
-		gif, err := b.renderFile(dialog, opts.customText, customID, opts.outputFileType)
+		gif, err := b.renderFile(dialog, opts.customText, opts.caption, customID, opts.outputFileType)
 		if err != nil {
 			return nil, err
 		}
@@ -1205,8 +1304,29 @@ func (b *Bot) buildInteractionResponse(
 	} else {
 		bodyText = ":timer: Rendering..."
 	}
+
+	originalTerms := ""
+	if opts.originalTerms != "" {
+		originalTerms = fmt.Sprintf("\noriginal terms: `%s` `#%s`", opts.originalTerms, opts.originalPosition)
+	}
+	return &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf(
+				"%s\n\n`%s`%s",
+				bodyText,
+				b.gifDescription(customID, opts.username, dialog, opts.customText != nil),
+				originalTerms,
+			),
+			Files:       files,
+			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
+		},
+	}, nil
+}
+
+func (b *Bot) gifDescription(customID *customIdPayload, username string, dialog []model2.Dialog, edited bool) string {
 	editLabel := ""
-	if opts.customText != nil {
+	if edited {
 		editLabel = " (edited)"
 	}
 	extendLabel := ""
@@ -1225,34 +1345,21 @@ func (b *Bot) buildInteractionResponse(
 			shiftLabel = fmt.Sprintf("(<<%s)", customID.Opts.Shift.String())
 		}
 	}
-	stickerLabel := ""
-	if customID.Opts.Sticker != nil {
-		stickerLabel = "(sticker)"
+	modeLabel := ""
+	if customID.Opts.Mode != NormalMode {
+		modeLabel = fmt.Sprintf("(%s)", customID.Opts.Mode)
 	}
-	originalTerms := ""
-	if opts.originalTerms != "" {
-		originalTerms = fmt.Sprintf("\noriginal terms: `%s` `#%s`", opts.originalTerms, opts.originalPosition)
-	}
-	return &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf(
-				"%s\n\n`%s@%s-%s%s%s%s%s` posted by `%s`%s",
-				bodyText,
-				customID.DialogID(),
-				dialog[0].StartTimestamp,
-				dialog[len(dialog)-1].EndTimestamp,
-				shiftLabel,
-				extendLabel,
-				editLabel,
-				stickerLabel,
-				opts.username,
-				originalTerms,
-			),
-			Files:       files,
-			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
-		},
-	}, nil
+	return fmt.Sprintf(
+		"`%s@%s-%s%s%s%s%s` posted by `%s`",
+		customID.DialogID(),
+		dialog[0].StartTimestamp,
+		dialog[len(dialog)-1].EndTimestamp,
+		shiftLabel,
+		extendLabel,
+		editLabel,
+		modeLabel,
+		username,
+	)
 }
 
 func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate, err error, logCtx ...any) {
@@ -1270,8 +1377,11 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 	}
 }
 
-func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *customIdPayload, outputFileType OutputFileType) (*discordgo.File, error) {
-	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || customID.Opts.Sticker != nil
+func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, caption string, customID *customIdPayload, outputFileType OutputFileType) (*discordgo.File, error) {
+	if customID.Opts.Mode == CaptionMode && caption == "" {
+		caption = "YOUR CAPTION HERE"
+	}
+	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || customID.Opts.Mode != NormalMode
 
 	startTimestamp := dialog[0].StartTimestamp
 	endTimestamp := dialog[len(dialog)-1].EndTimestamp
@@ -1347,6 +1457,8 @@ func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, customID *
 							createDrawtextFilter(dialog, customText, customID.Opts, withSimpsonsFont(customID.Publication == "simpsons")),
 							createCropFilter(customID.Opts),
 							createResizeFilter(customID.Opts),
+							createScaleFilter(customID.Opts),
+							createDrawtextCaptionFilter(caption),
 						),
 					},
 				).WithOutput(writer, os.Stderr).Run()
@@ -1478,11 +1590,11 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 
 	// no more results or current result not found.
 	if currentSelection == -1 || nextSelection >= len(res) || nextSelection < 0 {
-		b.updatePreviewWithOptions(s, i, customIDPayload, true)
+		b.updatePreviewWithOptions(s, i, customIDPayload, true, "")
 		return
 	}
 
-	b.updatePreviewWithOptions(s, i, res[nextSelection].ID, true)
+	b.updatePreviewWithOptions(s, i, res[nextSelection].ID, true, "")
 }
 
 func createFileName(customID *customIdPayload, suffix string) string {
@@ -1569,7 +1681,7 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, cidOpts c
 	for _, v := range opts {
 		v(options)
 	}
-	if cidOpts.Sticker != nil {
+	if cidOpts.Mode == StickerMode {
 		return ""
 	}
 	drawTextCommands := []string{}
@@ -1597,8 +1709,18 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, cidOpts c
 	return strings.Join(drawTextCommands, ", ")
 }
 
+func createDrawtextCaptionFilter(caption string) string {
+	if caption == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		`drawtext=text='%s':expansion=none:fontcolor=white:fontsize=18:x=(w-text_w)/2:y=20`,
+		strings.ToUpper(formatGifText(56, strings.Split(caption, "\n"))),
+	)
+}
+
 func createCropFilter(opts customIdOpts) string {
-	if opts.Sticker == nil {
+	if opts.Mode != StickerMode {
 		return ""
 	}
 	if opts.Sticker.X > 0 || opts.Sticker.Y > 0 || opts.Sticker.WidthOffset != 0 {
@@ -1612,10 +1734,17 @@ func createCropFilter(opts customIdOpts) string {
 }
 
 func createResizeFilter(opts customIdOpts) string {
-	if opts.Sticker == nil {
+	if opts.Mode != StickerMode {
 		return ""
 	}
 	return "scale=160:160"
+}
+
+func createScaleFilter(opts customIdOpts) string {
+	if opts.Mode != CaptionMode {
+		return ""
+	}
+	return "scale=421:238:force_original_aspect_ratio=decrease,pad=596:336:(ow-iw)/2:(oh-ih)/2+30,setsar=1"
 }
 
 func joinFilters(filters ...string) string {
@@ -1646,11 +1775,4 @@ func positiveOrZero(val int32) int32 {
 		return 0
 	}
 	return val
-}
-
-func ifOr[T any](test bool, a T, b T) T {
-	if test {
-		return a
-	}
-	return b
 }
