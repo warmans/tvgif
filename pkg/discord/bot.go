@@ -1313,7 +1313,7 @@ func (b *Bot) buildInteractionResponse(
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n`%s`%s",
+				"%s\n\n%s%s",
 				bodyText,
 				b.gifDescription(customID, opts.username, dialog, opts.customText != nil),
 				originalTerms,
