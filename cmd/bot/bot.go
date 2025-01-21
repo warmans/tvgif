@@ -10,6 +10,7 @@ import (
 	"github.com/warmans/tvgif/pkg/flag"
 	"github.com/warmans/tvgif/pkg/importer"
 	"github.com/warmans/tvgif/pkg/mediacache"
+	"github.com/warmans/tvgif/pkg/render"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/store"
 	"log"
@@ -104,8 +105,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				logger,
 				session,
 				searcher,
-				mediaCache,
-				mediaPath,
+				render.NewRenderer(mediaCache, mediaPath),
 				botUsername,
 				store.NewSRTStore(conn.Db),
 				docsRepo,

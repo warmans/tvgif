@@ -1,4 +1,4 @@
-package discord
+package customid
 
 import (
 	"encoding/json"
@@ -7,6 +7,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+)
+
+type OutputFileType string
+
+const (
+	OutputGif  = OutputFileType("gif")
+	OutputWebm = OutputFileType("webm")
 )
 
 type Mode string
@@ -23,14 +30,14 @@ type stickerOpts struct {
 	WidthOffset int32 `json:"w"`
 }
 
-type customIdOpts struct {
+type Opts struct {
 	ExtendOrTrim time.Duration `json:"x"`
 	Shift        time.Duration `json:"s"`
 	Sticker      *stickerOpts  `json:"t"`
 	Mode         Mode          `json:"m"`
 }
 
-func (c *customIdOpts) UnmarshalJSON(bytes []byte) error {
+func (c *Opts) UnmarshalJSON(bytes []byte) error {
 	raw := &struct {
 		ExtendOrTrim string       `json:"x"`
 		Shift        string       `json:"s"`
@@ -57,7 +64,7 @@ func (c *customIdOpts) UnmarshalJSON(bytes []byte) error {
 	return nil
 }
 
-func (c *customIdOpts) MarshalJSON() ([]byte, error) {
+func (c *Opts) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ExtendOrTrim string       `json:"x"`
 		Shift        string       `json:"s"`
@@ -71,28 +78,28 @@ func (c *customIdOpts) MarshalJSON() ([]byte, error) {
 	})
 }
 
-type customIdPayload struct {
+type Payload struct {
 	Publication   string
 	Series        int32
 	Episode       int32
 	StartPosition int64
 	EndPosition   int64
-	Opts          customIdOpts
+	Opts          Opts
 }
 
-func (c *customIdPayload) DialogID() string {
+func (c *Payload) DialogID() string {
 	return c.DialogIDWithRange(c.PositionRange())
 }
 
-func (c *customIdPayload) DialogIDWithRange(customRange string) string {
+func (c *Payload) DialogIDWithRange(customRange string) string {
 	return fmt.Sprintf("%s-%s", c.EpisodeID(), customRange)
 }
 
-func (c *customIdPayload) EpisodeID() string {
+func (c *Payload) EpisodeID() string {
 	return fmt.Sprintf("%s-%s", c.Publication, util.FormatSeriesAndEpisode(int(c.Series), int(c.Episode)))
 }
 
-func (c *customIdPayload) PositionRange() string {
+func (c *Payload) PositionRange() string {
 	position := fmt.Sprintf("%d", c.StartPosition)
 	if c.EndPosition > c.StartPosition {
 		position = fmt.Sprintf("%s_%d", position, c.EndPosition)
@@ -100,7 +107,7 @@ func (c *customIdPayload) PositionRange() string {
 	return position
 }
 
-func (c *customIdPayload) String() string {
+func (c *Payload) String() string {
 	optsString := ""
 	// care: the custom JSON marshallers use a pointer type
 	if optsBytes, err := json.Marshal(&c.Opts); err == nil {
@@ -118,30 +125,30 @@ func (c *customIdPayload) String() string {
 	)
 }
 
-func (c *customIdPayload) WithShift(shift time.Duration) *customIdPayload {
+func (c *Payload) WithShift(shift time.Duration) *Payload {
 	cp := *c
 	cp.Opts.Shift = shift
 	return &cp
 }
 
-func (c *customIdPayload) WithExtend(extendOrTrim time.Duration) *customIdPayload {
+func (c *Payload) WithExtend(extendOrTrim time.Duration) *Payload {
 	cp := *c
 	cp.Opts.ExtendOrTrim = extendOrTrim
 	return &cp
 }
 
-func (c *customIdPayload) WithStartPosition(start int64) *customIdPayload {
+func (c *Payload) WithStartPosition(start int64) *Payload {
 	cp := *c
 	cp.StartPosition = start
 	return &cp
 }
-func (c *customIdPayload) WithEndPosition(end int64) *customIdPayload {
+func (c *Payload) WithEndPosition(end int64) *Payload {
 	cp := *c
 	cp.EndPosition = end
 	return &cp
 }
 
-func (c *customIdPayload) WithMode(mode Mode) *customIdPayload {
+func (c *Payload) WithMode(mode Mode) *Payload {
 	cp := *c
 	cp.Opts.Mode = mode
 	if mode == StickerMode {
@@ -152,7 +159,7 @@ func (c *customIdPayload) WithMode(mode Mode) *customIdPayload {
 	return &cp
 }
 
-func (c *customIdPayload) WithStickerXIncrement(increment int32) *customIdPayload {
+func (c *Payload) WithStickerXIncrement(increment int32) *Payload {
 	cp := *c
 	if cp.Opts.Sticker == nil {
 		cp.Opts.Sticker = &stickerOpts{X: positiveOrZero(increment), Y: 0}
@@ -162,7 +169,7 @@ func (c *customIdPayload) WithStickerXIncrement(increment int32) *customIdPayloa
 	return &cp
 }
 
-func (c *customIdPayload) WithStickerYIncrement(increment int32) *customIdPayload {
+func (c *Payload) WithStickerYIncrement(increment int32) *Payload {
 	cp := *c
 	if cp.Opts.Sticker == nil {
 		cp.Opts.Sticker = &stickerOpts{X: 0, Y: positiveOrZero(increment)}
@@ -172,7 +179,7 @@ func (c *customIdPayload) WithStickerYIncrement(increment int32) *customIdPayloa
 	return &cp
 }
 
-func (c *customIdPayload) WithStickerWidthIncrement(increment int32) *customIdPayload {
+func (c *Payload) WithStickerWidthIncrement(increment int32) *Payload {
 	cp := *c
 	if cp.Opts.Sticker == nil {
 		cp.Opts.Sticker = &stickerOpts{X: 0, Y: 0, WidthOffset: increment}
@@ -183,15 +190,15 @@ func (c *customIdPayload) WithStickerWidthIncrement(increment int32) *customIdPa
 }
 
 // e.g. peepshow-S08E06-1[_4]-{s:1,e:4...}
-func parseCustomIDPayload(payloadStr string) (*customIdPayload, error) {
+func ParsePayload(payloadStr string) (*Payload, error) {
 
 	parts := strings.SplitN(payloadStr, "-", 4)
 	if len(parts) < 3 {
 		return nil, fmt.Errorf("unrecognized payload format: %s", payloadStr)
 	}
-	payload := &customIdPayload{
+	payload := &Payload{
 		Publication: parts[0],
-		Opts:        customIdOpts{},
+		Opts:        Opts{},
 	}
 	var err error
 	payload.Series, payload.Episode, err = util.ExtractSeriesAndEpisode(parts[1])
@@ -226,4 +233,11 @@ func parseCustomIDPayload(payloadStr string) (*customIdPayload, error) {
 	}
 
 	return payload, nil
+}
+
+func positiveOrZero(val int32) int32 {
+	if val < 0 {
+		return 0
+	}
+	return val
 }
