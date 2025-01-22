@@ -43,6 +43,7 @@ const (
 	ActionNextResult                = Action("nxt")
 	ActionPrevResult                = Action("prv")
 	ActionUpdatePreview             = Action("upd")
+	ActionUpdateState               = Action("sta")
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
@@ -126,11 +127,11 @@ func lockRenderer(username string, interactionIdentifier string) (func(), error)
 }
 
 type OutputState struct {
+	CustomID         *customid.Payload
 	OriginalTerms    string  `json:"t"`
 	OriginalPosition *string `json:"p"`
-	//  todo
-	//	CustomText       []string `json:"u"`
-	//  Caption          string   `json:"c"`
+	Caption          string  `json:"c"`
+	DisableSubtitles bool    `json:"d"`
 }
 
 func NewBot(
@@ -205,11 +206,12 @@ func NewBot(
 		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
 		ActionOpenCaptionModal:    bot.captionModal,
-		ActionUpdatePreview:       bot.updatePreview,
+		ActionUpdatePreview:       bot.updateCustomID,
+		ActionUpdateState:         bot.updateState,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:            bot.postCustomGif,
-		ActionConfirmPostGifWithCaption: bot.postGifWithCaption,
+		ActionConfirmPostGifWithCaption: bot.setCaption,
 	}
 
 	return bot, nil
@@ -464,25 +466,16 @@ func (b *Bot) queryBegin(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	b.respondError(s, i, fmt.Errorf("unknown command type"))
 }
 
-func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
-	b.updatePreviewWithOptions(s, i, rawCustomID, false, "")
+func (b *Bot) updateCustomID(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+	b.updatePreviewWithOptions(s, i, &StateUpdate{Type: UpdateCustomID, Value: rawCustomID})
 }
 
 func (b *Bot) updatePreviewWithOptions(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
-	rawCustomID string,
-	replaceOriginalPosition bool,
-	caption string,
+	upds ...*StateUpdate,
 ) {
-	b.logger.Info("Editing...", slog.String("custom_id", rawCustomID))
 	username := uniqueUser(i.Member, i.User)
-
-	customID, err := customid.ParsePayload(rawCustomID)
-	if err != nil {
-		b.respondError(s, i, fmt.Errorf("failed to parse customID (%s): %w", customID, err))
-		return
-	}
 
 	state, err := extractStateFromBody(i.Message.Content)
 	if err != nil {
@@ -490,18 +483,49 @@ func (b *Bot) updatePreviewWithOptions(
 		return
 	}
 
-	if replaceOriginalPosition {
-		state.OriginalPosition = util.ToPtr(customID.PositionRange())
+	for _, upd := range upds {
+		switch upd.Type {
+		case ToggleSubs:
+			state.DisableSubtitles = !state.DisableSubtitles
+		case SetCaption:
+			state.Caption = upd.Value
+		case ResetCustomID:
+			customID, err := customid.ParsePayload(upd.Value)
+			if err != nil {
+				b.respondError(s, i, fmt.Errorf("failed to parse customID (%s): %w", customID, err))
+				return
+			}
+			// reset state completely when customID is reset
+			state = &OutputState{
+				CustomID: customID,
+				// must keep this value to allow navigating between results
+				OriginalTerms:    state.OriginalTerms,
+				OriginalPosition: util.ToPtr(customID.PositionRange()),
+			}
+		case UpdateCustomID:
+			customID, err := customid.ParsePayload(upd.Value)
+			if err != nil {
+				b.respondError(s, i, fmt.Errorf("failed to parse customID (%s): %w", customID, err))
+				return
+			}
+			// just update the ID without resetting
+			state.CustomID = customID
+		}
 	}
 
-	dialog, err := b.srtStore.GetDialogRange(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
+	dialog, err := b.srtStore.GetDialogRange(
+		state.CustomID.Publication,
+		state.CustomID.Series,
+		state.CustomID.Episode,
+		state.CustomID.StartPosition,
+		state.CustomID.EndPosition,
+	)
 	if err != nil {
 		b.respondError(
 			s,
 			i,
-			fmt.Errorf("failed to fetch selected lines: %s", customID.String()),
+			fmt.Errorf("failed to fetch selected lines: %s", state.CustomID.String()),
 			slog.String("err", err.Error()),
-			slog.String("custom_id", rawCustomID),
 		)
 		return
 	}
@@ -512,7 +536,7 @@ func (b *Bot) updatePreviewWithOptions(
 
 	interactionResponse, err := b.buildInteractionResponse(
 		dialog,
-		customID,
+		state.CustomID,
 		state,
 		withUsername(username),
 		withPlaceholder(),
@@ -543,10 +567,9 @@ func (b *Bot) updatePreviewWithOptions(
 	go func() {
 		interactionResponse, err = b.buildInteractionResponse(
 			dialog,
-			customID,
+			state.CustomID,
 			state,
 			withUsername(username),
-			withCaption(caption),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -559,7 +582,7 @@ func (b *Bot) updatePreviewWithOptions(
 			}
 			return
 		}
-		buttons, err := b.createButtons(dialog, customID)
+		buttons, err := b.createButtons(dialog, state.CustomID)
 		if err != nil {
 			b.logger.Error("interaction failed", slog.String("err", err.Error()))
 			_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: util.ToPtr("Failed....")})
@@ -588,6 +611,7 @@ func (b *Bot) createGifPreview(
 	originalTerms string,
 ) error {
 	state := &OutputState{
+		CustomID:         customID,
 		OriginalTerms:    originalTerms,
 		OriginalPosition: util.ToPtr(customID.PositionRange()),
 	}
@@ -734,7 +758,13 @@ func (b *Bot) captionModal(s *discordgo.Session, i *discordgo.InteractionCreate,
 
 func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) ([]discordgo.MessageComponent, error) {
 
-	before, after, err := b.srtStore.GetDialogContext(customID.Publication, customID.Series, customID.Episode, customID.StartPosition, customID.EndPosition)
+	before, after, err := b.srtStore.GetDialogContext(
+		customID.Publication,
+		customID.Series,
+		customID.Episode,
+		customID.StartPosition,
+		customID.EndPosition,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -997,6 +1027,12 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			Disabled: false,
 			CustomID: encodeAction(ActionOpenCaptionModal, customID),
 		})
+		captionButtons = append(captionButtons, discordgo.Button{
+			Label:    "Toggle Subs",
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: mustEncodeUpdateStateAction(ToggleSubs, "true"),
+		})
 	}
 
 	var modeSelectBtn discordgo.Button
@@ -1107,10 +1143,24 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	b.postGifWithOptions(s, i, rawCustomID, customText, "")
 }
 
-func (b *Bot) postGifWithCaption(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
-	caption := i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
-	fmt.Println("update with caption ", caption)
-	b.updatePreviewWithOptions(s, i, rawCustomID, false, caption)
+func (b *Bot) updateState(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+	update, err := decodeUpdateStateAction(rawCustomID)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to decode state update: %w", err))
+		return
+	}
+	b.updatePreviewWithOptions(s, i, update)
+}
+
+func (b *Bot) setCaption(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+	b.updatePreviewWithOptions(
+		s,
+		i,
+		&StateUpdate{
+			Type:  SetCaption,
+			Value: i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value,
+		},
+	)
 }
 
 func (b *Bot) postGifFromPreview(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
@@ -1286,7 +1336,7 @@ func (b *Bot) buildInteractionResponse(
 
 	var bodyText string
 	if !opts.placeholder {
-		gif, err := b.renderFile(dialog, opts.customText, opts.caption, customID, opts.outputFileType)
+		gif, err := b.renderFile(state, dialog, opts.customText, customID, opts.outputFileType)
 		if err != nil {
 			return nil, err
 		}
@@ -1364,10 +1414,7 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 	}
 }
 
-func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, caption string, customID *customid.Payload, outputFileType customid.OutputFileType) (*discordgo.File, error) {
-	if customID.Opts.Mode == customid.CaptionMode && caption == "" {
-		caption = "YOUR CAPTION HERE"
-	}
+func (b *Bot) renderFile(state *OutputState, dialog []model2.Dialog, customText []string, customID *customid.Payload, outputFileType customid.OutputFileType) (*discordgo.File, error) {
 	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || customID.Opts.Mode != customid.NormalMode
 
 	startTimestamp := dialog[0].StartTimestamp
@@ -1397,15 +1444,24 @@ func (b *Bot) renderFile(dialog []model2.Dialog, customText []string, caption st
 	)
 	logger.Debug("Rendering file...")
 
-	file, err := b.renderer.RenderFile(
-		dialog[0].VideoFileName,
-		customID,
-		dialog,
+	options := []render.Option{
 		render.WithCaching(disableCaching),
 		render.WithCustomText(customText),
 		render.WithStartTimestamp(startTimestamp),
 		render.WithEndTimestamp(endTimestamp),
-		render.WithCaption(caption),
+	}
+	if customID.Opts.Mode == customid.CaptionMode {
+		options = append(options,
+			render.WithCaption(state.Caption),
+			render.WithDisableSubs(state.DisableSubtitles),
+		)
+	}
+
+	file, err := b.renderer.RenderFile(
+		dialog[0].VideoFileName,
+		customID,
+		dialog,
+		options...,
 	)
 	if err != nil {
 		b.logger.Error("failed to render file", slog.String("err", err.Error()))
@@ -1502,6 +1558,7 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 		b.logger.Error("Failed to fetch autocomplete options", slog.String("err", err.Error()))
 		return
 	}
+
 	currentSelection := -1
 	if state.OriginalPosition != nil {
 		for k, v := range res {
@@ -1520,11 +1577,25 @@ func (b *Bot) nextOrPreviousResult(s *discordgo.Session, i *discordgo.Interactio
 
 	// no more results or current result not found.
 	if currentSelection == -1 || nextSelection >= len(res) || nextSelection < 0 {
-		b.updatePreviewWithOptions(s, i, rawCustomID, true, "")
+		b.updatePreviewWithOptions(
+			s,
+			i,
+			&StateUpdate{
+				Type:  UpdateCustomID,
+				Value: rawCustomID,
+			},
+		)
 		return
 	}
 
-	b.updatePreviewWithOptions(s, i, res[nextSelection].ID, true, "")
+	b.updatePreviewWithOptions(
+		s,
+		i,
+		&StateUpdate{
+			Type:  ResetCustomID,
+			Value: res[nextSelection].ID,
+		},
+	)
 }
 
 func encodeAction(action Action, customID *customid.Payload) string {
@@ -1581,4 +1652,30 @@ func extractStateFromBody(msgContent string) (*OutputState, error) {
 	}
 
 	return state, nil
+}
+
+type StateUpdateType string
+
+const SetSearchResPosFromCID = StateUpdateType("set_search_res_pos_from_cid")
+const ToggleSubs = StateUpdateType("toggle_subs")
+const SetCaption = StateUpdateType("set_caption")
+const UpdateCustomID = StateUpdateType("update_custom_id")
+const ResetCustomID = StateUpdateType("reset_custom_id")
+
+type StateUpdate struct {
+	Type  StateUpdateType
+	Value string
+}
+
+func mustEncodeUpdateStateAction(tpe StateUpdateType, value string) string {
+	enc, err := json.Marshal(StateUpdate{Type: tpe, Value: value})
+	if err != nil {
+		panic(fmt.Sprintf("failed to encode state update: %s", err.Error()))
+	}
+	return fmt.Sprintf("%s:%s", ActionUpdateState, string(enc))
+}
+
+func decodeUpdateStateAction(encoded string) (*StateUpdate, error) {
+	upd := &StateUpdate{}
+	return upd, json.Unmarshal([]byte(strings.TrimPrefix(encoded, fmt.Sprintf("%s:", ActionUpdateState))), upd)
 }

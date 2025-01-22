@@ -34,6 +34,7 @@ type renderOpts struct {
 	disableCaching bool
 	customText     []string
 	caption        string
+	disableSubs    bool
 }
 
 func WithStartTimestamp(ts time.Duration) Option {
@@ -62,7 +63,16 @@ func WithCustomText(text []string) Option {
 
 func WithCaption(text string) Option {
 	return func(opts *renderOpts) {
+		if text == "" {
+			return
+		}
 		opts.caption = text
+	}
+}
+
+func WithDisableSubs(disable bool) Option {
+	return func(opts *renderOpts) {
+		opts.disableSubs = disable
 	}
 }
 
@@ -145,7 +155,15 @@ func (r *Renderer) RenderFile(
 					ffmpeg_go.KwArgs{
 						"format": "gif",
 						"filter_complex": joinFilters(
-							createDrawtextFilter(dialog, opts.customText, customID.Opts, withSimpsonsFont(customID.Publication == "simpsons")),
+							onlyIf(
+								!opts.disableSubs,
+								createDrawtextFilter(
+									dialog,
+									opts.customText,
+									customID.Opts,
+									withSimpsonsFont(customID.Publication == "simpsons"),
+								),
+							),
 							createCropFilter(customID.Opts),
 							createResizeFilter(customID.Opts),
 							createScaleFilter(customID.Opts),
@@ -304,4 +322,11 @@ func lineLength(line []string) int {
 	}
 	// total + number of spaces that would be in the line
 	return total + (len(line) - 1)
+}
+
+func onlyIf(cond bool, value string) string {
+	if cond {
+		return value
+	}
+	return ""
 }
