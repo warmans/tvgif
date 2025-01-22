@@ -9,7 +9,6 @@ import (
 	"github.com/warmans/tvgif/pkg/discord/customid"
 	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/limits"
-	"github.com/warmans/tvgif/pkg/mediacache"
 	model2 "github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/render"
 	"github.com/warmans/tvgif/pkg/search"
@@ -221,7 +220,6 @@ type Bot struct {
 	logger          *slog.Logger
 	session         *discordgo.Session
 	searcher        search.Searcher
-	mediaCache      *mediacache.Cache
 	docs            *docs.Repo
 	renderer        *render.Renderer
 	srtStore        *store.SRTStore
