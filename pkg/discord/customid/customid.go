@@ -25,16 +25,16 @@ const (
 )
 
 type stickerOpts struct {
-	X           int32 `json:"x"`
-	Y           int32 `json:"y"`
-	WidthOffset int32 `json:"w"`
+	X           int32 `json:"x,omitempty"`
+	Y           int32 `json:"y,omitempty"`
+	WidthOffset int32 `json:"w,omitempty"`
 }
 
 type Opts struct {
-	ExtendOrTrim time.Duration `json:"x"`
-	Shift        time.Duration `json:"s"`
-	Sticker      *stickerOpts  `json:"t"`
-	Mode         Mode          `json:"m"`
+	ExtendOrTrim time.Duration `json:"x,omitempty"`
+	Shift        time.Duration `json:"s,omitempty"`
+	Sticker      *stickerOpts  `json:"t,omitempty"`
+	Mode         Mode          `json:"m,omitempty"`
 }
 
 func (c *Opts) UnmarshalJSON(bytes []byte) error {
@@ -79,12 +79,12 @@ func (c *Opts) MarshalJSON() ([]byte, error) {
 }
 
 type Payload struct {
-	Publication   string
-	Series        int32
-	Episode       int32
-	StartPosition int64
-	EndPosition   int64
-	Opts          Opts
+	Publication   string `json:"p,omitempty"`
+	Series        int32  `json:"s,omitempty"`
+	Episode       int32  `json:"e,omitempty"`
+	StartPosition int64  `json:"sp,omitempty"`
+	EndPosition   int64  `json:"ep,omitempty"`
+	Opts          Opts   `json:"o,omitempty"`
 }
 
 func (c *Payload) DialogID() string {

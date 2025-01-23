@@ -35,14 +35,15 @@ const (
 type Action string
 
 const (
-	ActionConfirmPostGif            = Action("cfrmg")
-	ActionConfirmPostGifWithCaption = Action("cfrmc")
-	ActionOpenCustomTextModal       = Action("cstm")
-	ActionOpenCaptionModal          = Action("ctm")
-	ActionNextResult                = Action("nxt")
-	ActionPrevResult                = Action("prv")
-	ActionUpdatePreview             = Action("upd")
-	ActionUpdateState               = Action("sta")
+	ActionConfirmPostGif       = Action("cfrmg")
+	ActionConfirmPostCustomGif = Action("cnfmc")
+	ActionOpenCustomTextModal  = Action("cstm")
+	ActionOpenCaptionModal     = Action("ctm")
+	ActionNextResult           = Action("nxt")
+	ActionPrevResult           = Action("prv")
+	ActionUpdatePreview        = Action("upd")
+	ActionUpdateState          = Action("sta")
+	ActionSetCaption           = Action("sc")
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
@@ -127,10 +128,10 @@ func lockRenderer(username string, interactionIdentifier string) (func(), error)
 
 type OutputState struct {
 	CustomID         *customid.Payload
-	OriginalTerms    string  `json:"t"`
-	OriginalPosition *string `json:"p"`
-	Caption          string  `json:"c"`
-	DisableSubtitles bool    `json:"d"`
+	OriginalTerms    string  `json:"t,omitempty" `
+	OriginalPosition *string `json:"p,omitempty"`
+	Caption          string  `json:"c,omitempty"`
+	DisableSubtitles bool    `json:"d,omitempty"`
 }
 
 func NewBot(
@@ -204,13 +205,13 @@ func NewBot(
 		ActionNextResult:          bot.nextResult,
 		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
-		ActionOpenCaptionModal:    bot.captionModal,
+		ActionOpenCaptionModal:    bot.openCaptionModal,
 		ActionUpdatePreview:       bot.updateCustomID,
 		ActionUpdateState:         bot.updateState,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
-		ActionConfirmPostGif:            bot.postCustomGif,
-		ActionConfirmPostGifWithCaption: bot.setCaption,
+		ActionConfirmPostCustomGif: bot.postCustomGif,
+		ActionSetCaption:           bot.setCaption,
 	}
 
 	return bot, nil
@@ -711,7 +712,7 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, ra
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID:   encodeAction(ActionConfirmPostGif, customID),
+			CustomID:   encodeAction(ActionConfirmPostCustomGif, customID),
 			Title:      "Edit and Post GIF (no preview)",
 			Components: fields,
 		},
@@ -721,7 +722,7 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, ra
 	}
 }
 
-func (b *Bot) captionModal(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+func (b *Bot) openCaptionModal(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
 	customID, err := customid.ParsePayload(rawCustomID)
 	if err != nil {
 		b.respondError(s, i, fmt.Errorf("invalid customID"))
@@ -744,8 +745,8 @@ func (b *Bot) captionModal(s *discordgo.Session, i *discordgo.InteractionCreate,
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID:   encodeAction(ActionConfirmPostGifWithCaption, customID),
-			Title:      "Add caption and Post GIF (no preview)",
+			CustomID:   encodeAction(ActionSetCaption, customID),
+			Title:      "Set Caption",
 			Components: fields,
 		},
 	})
