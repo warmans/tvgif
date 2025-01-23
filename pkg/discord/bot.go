@@ -250,7 +250,6 @@ func (b *Bot) Start() error {
 			}
 		case discordgo.InteractionModalSubmit:
 			// prefix match buttons to allow additional data in the customID
-			fmt.Println("Modal submit ", i.ModalSubmitData().CustomID)
 			for k, h := range b.modalHandlers {
 				actionPrefix := fmt.Sprintf("%s:", k)
 				if strings.HasPrefix(i.ModalSubmitData().CustomID, actionPrefix) {

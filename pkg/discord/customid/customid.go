@@ -37,14 +37,15 @@ type Opts struct {
 	Mode         Mode          `json:"m,omitempty"`
 }
 
-func (c *Opts) UnmarshalJSON(bytes []byte) error {
-	raw := &struct {
-		ExtendOrTrim string       `json:"x"`
-		Shift        string       `json:"s"`
-		Sticker      *stickerOpts `json:"t"`
-		Mode         Mode         `json:"m"`
-	}{}
+type RawOpts struct {
+	ExtendOrTrim string       `json:"x,omitempty"`
+	Shift        string       `json:"s,omitempty"`
+	Sticker      *stickerOpts `json:"t,omitempty"`
+	Mode         Mode         `json:"m,omitempty"`
+}
 
+func (c *Opts) UnmarshalJSON(bytes []byte) error {
+	raw := &RawOpts{}
 	if err := json.Unmarshal(bytes, raw); err != nil {
 		return err
 	}
@@ -65,12 +66,7 @@ func (c *Opts) UnmarshalJSON(bytes []byte) error {
 }
 
 func (c *Opts) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ExtendOrTrim string       `json:"x"`
-		Shift        string       `json:"s"`
-		Sticker      *stickerOpts `json:"t"`
-		Mode         Mode         `json:"m"`
-	}{
+	return json.Marshal(RawOpts{
 		ExtendOrTrim: c.ExtendOrTrim.String(),
 		Shift:        c.Shift.String(),
 		Sticker:      c.Sticker,
