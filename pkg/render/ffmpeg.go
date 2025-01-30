@@ -209,15 +209,24 @@ func createDrawtextFilter(dialog []model2.Dialog, customText []string, cidOpts c
 		if options.font != "" {
 			font = fmt.Sprintf("fontfile='%s':", options.font)
 		}
-		drawTextCommands = append(drawTextCommands, fmt.Sprintf(
-			`drawtext=%stext='%s':expansion=none:fontcolor=white:fontsize=%d:box=1:boxcolor=black@%0.1f:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+10)):enable='between(t,%0.2f,%0.2f):shadowx=2:shadowy=2'`,
-			font,
-			formatGifText(56, strings.Split(dialogText, "\n")),
-			options.fontSize,
-			options.boxOpacity,
-			startSecond.Seconds(),
-			endSecond.Seconds(),
-		))
+
+		lineHeight := 28
+		marginBottom := 10
+		lines := strings.Split(formatGifText(56, strings.Split(dialogText, "\n")), "\n")
+		verticalOffset := ((len(lines) - 1) * lineHeight) + marginBottom
+		for _, line := range lines {
+			drawTextCommands = append(drawTextCommands, fmt.Sprintf(
+				`drawtext=%stext='%s':line_spacing=10:expansion=none:fontcolor=white:fontsize=%d:box=1:boxcolor=black@%0.1f:boxborderw=5:x=(w-text_w)/2:y=(h-(text_h+%d)):enable='between(t,%0.2f,%0.2f):shadowx=2:shadowy=2'`,
+				font,
+				line,
+				options.fontSize,
+				options.boxOpacity,
+				verticalOffset,
+				startSecond.Seconds(),
+				endSecond.Seconds(),
+			))
+			verticalOffset -= lineHeight
+		}
 	}
 	return strings.Join(drawTextCommands, ", ")
 }
