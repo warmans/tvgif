@@ -728,6 +728,12 @@ func (b *Bot) openCaptionModal(s *discordgo.Session, i *discordgo.InteractionCre
 		return
 	}
 
+	state, err := extractStateFromBody(i.Message.Content)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to get current state"))
+		return
+	}
+
 	fields := []discordgo.MessageComponent{discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.TextInput{
@@ -735,8 +741,8 @@ func (b *Bot) openCaptionModal(s *discordgo.Session, i *discordgo.InteractionCre
 				Label:       "Caption",
 				Style:       discordgo.TextInputParagraph,
 				Required:    true,
-				MaxLength:   64,
-				Value:       "",
+				MaxLength:   128,
+				Value:       state.Caption,
 				Placeholder: "Caption added to top of image",
 			},
 		},

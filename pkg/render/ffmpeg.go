@@ -235,10 +235,20 @@ func createDrawtextCaptionFilter(caption string) string {
 	if caption == "" {
 		return ""
 	}
-	return fmt.Sprintf(
-		`drawtext=text='%s':expansion=none:fontcolor=white:fontsize=18:x=(w-text_w)/2:y=20`,
-		strings.ToUpper(formatGifText(56, strings.Split(caption, "\n"))),
-	)
+	lineHeight := 28
+	lines := strings.Split(formatGifText(56, strings.Split(caption, "\n")), "\n")
+	verticalOffset := 0
+
+	drawTextCommands := []string{}
+	for _, line := range lines {
+		drawTextCommands = append(drawTextCommands, fmt.Sprintf(
+			`drawtext=text='%s':expansion=none:fontcolor=white:fontsize=18:x=(w-text_w)/2:y=20+%d`,
+			line,
+			verticalOffset,
+		))
+		verticalOffset += lineHeight
+	}
+	return strings.Join(drawTextCommands, ", ")
 }
 
 func createCropFilter(opts customid.Opts) string {
