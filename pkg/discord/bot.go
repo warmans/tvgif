@@ -1394,7 +1394,7 @@ func (b *Bot) buildInteractionResponse(
 	}
 
 	var info string
-	if state.CustomID.Opts.Mode == customid.VideoMode {
+	if state != nil && state.CustomID != nil && state.CustomID.Opts.Mode == customid.VideoMode {
 		info = "\nNote: Most videos do not currently have audio."
 	}
 
