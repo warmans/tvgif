@@ -37,6 +37,12 @@ type renderOpts struct {
 	disableSubs    bool
 }
 
+func WithOutputFileType(tp customid.OutputFileType) Option {
+	return func(opts *renderOpts) {
+		opts.outputFileType = tp
+	}
+}
+
 func WithStartTimestamp(ts time.Duration) Option {
 	return func(opts *renderOpts) {
 		opts.startTimestamp = ts
@@ -134,6 +140,17 @@ func (r *Renderer) RenderFile(
 						"t":            fmt.Sprintf("%0.2f", opts.endTimestamp.Seconds()-opts.startTimestamp.Seconds()),
 						"map_metadata": "-1",
 						"format":       "webm",
+						"filter_complex": joinFilters(
+							onlyIf(
+								!opts.disableSubs,
+								createDrawtextFilter(
+									dialog,
+									opts.customText,
+									customID.Opts,
+									withSimpsonsFont(customID.Publication == "simpsons"),
+								),
+							),
+						),
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {

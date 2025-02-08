@@ -22,6 +22,7 @@ const (
 	NormalMode  Mode = ""
 	StickerMode Mode = "sticker"
 	CaptionMode Mode = "caption"
+	VideoMode   Mode = "video"
 )
 
 type stickerOpts struct {

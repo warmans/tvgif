@@ -37,6 +37,7 @@ type Action string
 const (
 	ActionConfirmPostGif       = Action("cfrmg")
 	ActionConfirmPostCustomGif = Action("cnfmc")
+	ActionConfirmPostWemb      = Action("cnfwb")
 	ActionOpenCustomTextModal  = Action("cstm")
 	ActionOpenCaptionModal     = Action("ctm")
 	ActionNextResult           = Action("nxt")
@@ -202,6 +203,7 @@ func NewBot(
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:      bot.postGifFromPreview,
+		ActionConfirmPostWemb:     bot.postWebm,
 		ActionNextResult:          bot.nextResult,
 		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
@@ -712,7 +714,7 @@ func (b *Bot) editModal(s *discordgo.Session, i *discordgo.InteractionCreate, ra
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
 			CustomID:   encodeAction(ActionConfirmPostCustomGif, customID),
-			Title:      "Edit and Post GIF (no preview)",
+			Title:      "Edit and Post (no preview)",
 			Components: fields,
 		},
 	})
@@ -867,6 +869,17 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 		},
 	}
 	extendButtons := []discordgo.MessageComponent{}
+	if dialogDuration+(time.Second/5) <= limits.MaxGifDuration {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "0.2s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim+(time.Second/5))),
+		})
+	}
 	if dialogDuration+(time.Second/2) <= limits.MaxGifDuration {
 		extendButtons = append(extendButtons, discordgo.Button{
 			Label: "0.5s",
@@ -912,6 +925,17 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 		})
 	}
 	trimButtons := []discordgo.MessageComponent{}
+	if dialogDuration-(time.Second/5) > 0 {
+		trimButtons = append(trimButtons, discordgo.Button{
+			Label: "0.2s",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "✂",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithExtend(customID.Opts.ExtendOrTrim-(time.Second/5))),
+		})
+	}
 	if dialogDuration-(time.Second/2) > 0 {
 		trimButtons = append(trimButtons, discordgo.Button{
 			Label: "0.5s",
@@ -1061,6 +1085,16 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			Disabled: false,
 			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.CaptionMode)),
 		}
+	case customid.CaptionMode:
+		modeSelectBtn = discordgo.Button{
+			Label: "Next Mode (Video)",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎦",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.VideoMode)),
+		}
 	default:
 		modeSelectBtn = discordgo.Button{
 			Label: "Next Mode (Normal)",
@@ -1074,7 +1108,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 	}
 
 	postActions := []discordgo.MessageComponent{discordgo.Button{
-		Label: "Post GIF",
+		Label: "Post",
 		Emoji: &discordgo.ComponentEmoji{
 			Name: "✅",
 		},
@@ -1084,7 +1118,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 	}}
 	if customID.Opts.Mode == customid.NormalMode {
 		postActions = append(postActions, discordgo.Button{
-			Label: "Post GIF with Custom Text",
+			Label: "Post with Custom Text",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "✅",
 			},
@@ -1093,21 +1127,22 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			CustomID: encodeAction(ActionOpenCustomTextModal, customID),
 		})
 	}
+
 	postActions = append(postActions,
 		modeSelectBtn,
 		discordgo.Button{
-			Label: "Prev",
+			Label: "Prev Result",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "❌",
+				Name: "⏫",
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
 			CustomID: encodeAction(ActionPrevResult, customID),
 		},
 		discordgo.Button{
-			Label: "Next",
+			Label: "Next Result",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "❌",
+				Name: "⏬",
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
@@ -1144,7 +1179,15 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	for k := range i.Interaction.ModalSubmitData().Components {
 		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
 	}
-	b.postGifWithOptions(s, i, rawCustomID, customText, "")
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", false)
+}
+
+func (b *Bot) postWebm(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+	var customText []string
+	for k := range i.Interaction.ModalSubmitData().Components {
+		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
+	}
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", true)
 }
 
 func (b *Bot) updateState(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
@@ -1224,7 +1267,7 @@ func (b *Bot) postGifFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 	}
 }
 
-func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string, customText []string, caption string) {
+func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string, customText []string, caption string, video bool) {
 	if rawCustomID == "" {
 		b.respondError(s, i, fmt.Errorf("missing customID"))
 		return
@@ -1246,8 +1289,8 @@ func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 
-	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), customText, customID, false, caption); err != nil {
-		b.logger.Error("Failed to complete video response", slog.String("err", err.Error()))
+	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), customText, customID, video, caption); err != nil {
+		b.logger.Error("Failed to complete media response", slog.String("err", err.Error()), slog.Bool("video", video))
 	}
 }
 
@@ -1350,14 +1393,20 @@ func (b *Bot) buildInteractionResponse(
 		bodyText = ":timer: Rendering..."
 	}
 
+	var info string
+	if state.CustomID.Opts.Mode == customid.VideoMode {
+		info = "\nNote: Most videos do not currently have audio."
+	}
+
 	return &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf(
-				"%s\n\n%s\n%s",
+				"%s\n\n%s\n%s%s",
 				bodyText,
 				b.gifDescription(customID, opts.username, dialog, opts.customText != nil),
 				mustEncodeState(state),
+				info,
 			),
 			Files:       files,
 			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
@@ -1459,6 +1508,9 @@ func (b *Bot) renderFile(state *OutputState, dialog []model2.Dialog, customText 
 			render.WithCaption(state.Caption),
 			render.WithDisableSubs(state.DisableSubtitles),
 		)
+	}
+	if customID.Opts.Mode == customid.VideoMode {
+		options = append(options, render.WithOutputFileType(customid.OutputWebm))
 	}
 
 	file, err := b.renderer.RenderFile(
