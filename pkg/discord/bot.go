@@ -1085,16 +1085,16 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			Disabled: false,
 			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.CaptionMode)),
 		}
-	case customid.CaptionMode:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Video)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎦",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.VideoMode)),
-		}
+	//case customid.CaptionMode:
+	//	modeSelectBtn = discordgo.Button{
+	//		Label: "Next Mode (Video)",
+	//		Emoji: &discordgo.ComponentEmoji{
+	//			Name: "🎦",
+	//		},
+	//		Style:    discordgo.SecondaryButton,
+	//		Disabled: false,
+	//		CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.VideoMode)),
+	//	}
 	default:
 		modeSelectBtn = discordgo.Button{
 			Label: "Next Mode (Normal)",
@@ -1307,7 +1307,7 @@ func (b *Bot) completeResponse(
 	interactionResponse, err := b.buildInteractionResponse(
 		dialog,
 		customID,
-		nil,
+		nil, //todo: this should never be nil
 		withUsername(username),
 		withPlaceholder(),
 		withVideo(video),
