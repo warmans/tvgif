@@ -17,7 +17,7 @@ import (
 
 func resolveRenderOpts(opt ...Option) *renderOpts {
 	opts := &renderOpts{
-		outputFileType: customid.OutputGif,
+		outputFileType: customid.OutputWebp,
 	}
 
 	for _, v := range opt {
@@ -162,7 +162,7 @@ func (r *Renderer) RenderFile(
 		mimeType = "image/gif"
 		extension = "gif"
 		format := "gif"
-		if opts.outputFileType == customid.OutputWebp {
+		if opts.outputFileType == customid.OutputWebp && customID.Opts.Mode != customid.StickerMode {
 			mimeType = "image/webp"
 			extension = "webp"
 			format = "webp"

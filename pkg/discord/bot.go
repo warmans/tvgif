@@ -59,7 +59,7 @@ var errDuplicateInteraction = errors.New("interaction already processing")
 func resolveResponseOptions(opts ...responseOption) *responseOptions {
 	options := &responseOptions{
 		username:       "unknown",
-		outputFileType: customid.OutputGif,
+		outputFileType: customid.OutputWebp,
 	}
 	for _, o := range opts {
 		o(options)
@@ -1084,16 +1084,16 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			Disabled: false,
 			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.CaptionMode)),
 		}
-	case customid.CaptionMode:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Animated webp)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎦",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.WebpMode)),
-		}
+	//case customid.CaptionMode:
+	//	modeSelectBtn = discordgo.Button{
+	//		Label: "Next Mode (Animated webp)",
+	//		Emoji: &discordgo.ComponentEmoji{
+	//			Name: "🎦",
+	//		},
+	//		Style:    discordgo.SecondaryButton,
+	//		Disabled: false,
+	//		CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.WebpMode)),
+	//	}
 	default:
 		modeSelectBtn = discordgo.Button{
 			Label: "Next Mode (Normal)",
@@ -1178,7 +1178,7 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	for k := range i.Interaction.ModalSubmitData().Components {
 		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
 	}
-	b.postGifWithOptions(s, i, rawCustomID, customText, "", customid.OutputGif)
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", customid.OutputWebp)
 }
 
 func (b *Bot) postWebm(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
