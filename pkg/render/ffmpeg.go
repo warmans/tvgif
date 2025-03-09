@@ -158,9 +158,15 @@ func (r *Renderer) RenderFile(
 			}
 			return nil
 		})
-	case customid.OutputGif:
+	case customid.OutputGif, customid.OutputWebp:
 		mimeType = "image/gif"
 		extension = "gif"
+		format := "gif"
+		if opts.outputFileType == customid.OutputWebp {
+			mimeType = "image/webp"
+			extension = "webp"
+			format = "webp"
+		}
 		_, err = r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching, func(writer io.Writer) error {
 			err := ffmpeg_go.
 				Input(path.Join(r.mediaPath, videoFileName),
@@ -170,7 +176,7 @@ func (r *Renderer) RenderFile(
 					}).
 				Output("pipe:",
 					ffmpeg_go.KwArgs{
-						"format": "gif",
+						"format": format,
 						"filter_complex": joinFilters(
 							onlyIf(
 								!opts.disableSubs,
@@ -186,6 +192,9 @@ func (r *Renderer) RenderFile(
 							createScaleFilter(customID.Opts),
 							createDrawtextCaptionFilter(opts.caption),
 						),
+						// for some reason this is necessary for discord to display webp images.
+						// it doesn't actually stop it from looping or affect gifs...
+						"loop": "0",
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {

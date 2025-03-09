@@ -14,6 +14,7 @@ type OutputFileType string
 const (
 	OutputGif  = OutputFileType("gif")
 	OutputWebm = OutputFileType("webm")
+	OutputWebp = OutputFileType("webp")
 )
 
 type Mode string
@@ -23,6 +24,7 @@ const (
 	StickerMode Mode = "sticker"
 	CaptionMode Mode = "caption"
 	VideoMode   Mode = "video"
+	WebpMode    Mode = "webp"
 )
 
 type stickerOpts struct {

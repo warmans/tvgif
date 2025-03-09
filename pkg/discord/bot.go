@@ -37,7 +37,8 @@ type Action string
 const (
 	ActionConfirmPostGif       = Action("cfrmg")
 	ActionConfirmPostCustomGif = Action("cnfmc")
-	ActionConfirmPostWemb      = Action("cnfwb")
+	ActionConfirmPostWebm      = Action("cnfwm")
+	ActionConfirmPostWebp      = Action("cnfwp")
 	ActionOpenCustomTextModal  = Action("cstm")
 	ActionOpenCaptionModal     = Action("ctm")
 	ActionNextResult           = Action("nxt")
@@ -88,13 +89,9 @@ func withCustomText(customText []string) responseOption {
 	}
 }
 
-func withVideo(video bool) responseOption {
+func withOutputFileType(kind customid.OutputFileType) responseOption {
 	return func(options *responseOptions) {
-		if video {
-			options.outputFileType = customid.OutputWebm
-		} else {
-			options.outputFileType = customid.OutputGif
-		}
+		options.outputFileType = kind
 	}
 }
 
@@ -129,10 +126,11 @@ func lockRenderer(username string, interactionIdentifier string) (func(), error)
 
 type OutputState struct {
 	CustomID         *customid.Payload
-	OriginalTerms    string  `json:"t,omitempty" `
-	OriginalPosition *string `json:"p,omitempty"`
-	Caption          string  `json:"c,omitempty"`
-	DisableSubtitles bool    `json:"d,omitempty"`
+	OriginalTerms    string                  `json:"t,omitempty" `
+	OriginalPosition *string                 `json:"p,omitempty"`
+	Caption          string                  `json:"c,omitempty"`
+	DisableSubtitles bool                    `json:"d,omitempty"`
+	OutputFormat     customid.OutputFileType `json:"o,omitempty"`
 }
 
 func NewBot(
@@ -203,7 +201,8 @@ func NewBot(
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, suffix string){
 		ActionConfirmPostGif:      bot.postGifFromPreview,
-		ActionConfirmPostWemb:     bot.postWebm,
+		ActionConfirmPostWebm:     bot.postWebm,
+		ActionConfirmPostWebp:     bot.postWebp,
 		ActionNextResult:          bot.nextResult,
 		ActionPrevResult:          bot.previousResult,
 		ActionOpenCustomTextModal: bot.editModal,
@@ -1085,16 +1084,16 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 			Disabled: false,
 			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.CaptionMode)),
 		}
-	//case customid.CaptionMode:
-	//	modeSelectBtn = discordgo.Button{
-	//		Label: "Next Mode (Video)",
-	//		Emoji: &discordgo.ComponentEmoji{
-	//			Name: "🎦",
-	//		},
-	//		Style:    discordgo.SecondaryButton,
-	//		Disabled: false,
-	//		CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.VideoMode)),
-	//	}
+	case customid.CaptionMode:
+		modeSelectBtn = discordgo.Button{
+			Label: "Next Mode (Animated webp)",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎦",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionUpdatePreview, customID.WithMode(customid.WebpMode)),
+		}
 	default:
 		modeSelectBtn = discordgo.Button{
 			Label: "Next Mode (Normal)",
@@ -1179,7 +1178,7 @@ func (b *Bot) postCustomGif(s *discordgo.Session, i *discordgo.InteractionCreate
 	for k := range i.Interaction.ModalSubmitData().Components {
 		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
 	}
-	b.postGifWithOptions(s, i, rawCustomID, customText, "", false)
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", customid.OutputGif)
 }
 
 func (b *Bot) postWebm(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
@@ -1187,7 +1186,15 @@ func (b *Bot) postWebm(s *discordgo.Session, i *discordgo.InteractionCreate, raw
 	for k := range i.Interaction.ModalSubmitData().Components {
 		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
 	}
-	b.postGifWithOptions(s, i, rawCustomID, customText, "", true)
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", customid.OutputWebp)
+}
+
+func (b *Bot) postWebp(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
+	var customText []string
+	for k := range i.Interaction.ModalSubmitData().Components {
+		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
+	}
+	b.postGifWithOptions(s, i, rawCustomID, customText, "", customid.OutputWebp)
 }
 
 func (b *Bot) updateState(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
@@ -1267,7 +1274,7 @@ func (b *Bot) postGifFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 	}
 }
 
-func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string, customText []string, caption string, video bool) {
+func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string, customText []string, caption string, outputFormat customid.OutputFileType) {
 	if rawCustomID == "" {
 		b.respondError(s, i, fmt.Errorf("missing customID"))
 		return
@@ -1289,8 +1296,8 @@ func (b *Bot) postGifWithOptions(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 
-	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), customText, customID, video, caption); err != nil {
-		b.logger.Error("Failed to complete media response", slog.String("err", err.Error()), slog.Bool("video", video))
+	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), customText, customID, outputFormat, caption); err != nil {
+		b.logger.Error("Failed to complete media response", slog.String("err", err.Error()), slog.String("format", string(outputFormat)))
 	}
 }
 
@@ -1301,7 +1308,7 @@ func (b *Bot) completeResponse(
 	username string,
 	customText []string,
 	customID *customid.Payload,
-	video bool,
+	outputFormat customid.OutputFileType,
 	caption string,
 ) error {
 	interactionResponse, err := b.buildInteractionResponse(
@@ -1310,7 +1317,7 @@ func (b *Bot) completeResponse(
 		nil, //todo: this should never be nil
 		withUsername(username),
 		withPlaceholder(),
-		withVideo(video),
+		withOutputFileType(outputFormat),
 	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -1333,7 +1340,7 @@ func (b *Bot) completeResponse(
 			nil,
 			withUsername(username),
 			withCustomText(customText),
-			withVideo(video),
+			withOutputFileType(outputFormat),
 			withCaption(caption))
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -1468,7 +1475,7 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 }
 
 func (b *Bot) renderFile(state *OutputState, dialog []model2.Dialog, customText []string, customID *customid.Payload, outputFileType customid.OutputFileType) (*discordgo.File, error) {
-	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || customID.Opts.Mode != customid.NormalMode
+	disableCaching := customID.Opts.ExtendOrTrim != 0 || customID.Opts.Shift != 0 || customText != nil || (customID.Opts.Mode != customid.NormalMode && customID.Opts.Mode != customid.WebpMode)
 
 	startTimestamp := dialog[0].StartTimestamp
 	endTimestamp := dialog[len(dialog)-1].EndTimestamp
@@ -1509,8 +1516,8 @@ func (b *Bot) renderFile(state *OutputState, dialog []model2.Dialog, customText 
 			render.WithDisableSubs(state.DisableSubtitles),
 		)
 	}
-	if customID.Opts.Mode == customid.VideoMode {
-		options = append(options, render.WithOutputFileType(customid.OutputWebm))
+	if customID.Opts.Mode == customid.WebpMode {
+		options = append(options, render.WithOutputFileType(customid.OutputWebp))
 	}
 
 	file, err := b.renderer.RenderFile(
