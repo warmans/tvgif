@@ -194,7 +194,8 @@ func (r *Renderer) RenderFile(
 						),
 						// for some reason this is necessary for discord to display webp images.
 						// it doesn't actually stop it from looping or affect gifs...
-						"loop": "0",
+						"loop":    "0",
+						"quality": "90",
 					},
 				).WithOutput(writer, os.Stderr).Run()
 			if err != nil {
