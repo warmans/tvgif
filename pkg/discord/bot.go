@@ -709,7 +709,7 @@ func (b *Bot) openEditModal(s *discordgo.Session, i *discordgo.InteractionCreate
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
 			CustomID: encodeAction(ActionSetSubs, customID),
-			Title:    "Edit and Post (no preview)",
+			Title:    "Edit Subs",
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
