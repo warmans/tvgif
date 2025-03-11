@@ -114,3 +114,11 @@ func NormaliseNumericIdentifier(identifier string) string {
 	}
 	return normalised
 }
+
+func TrimStrings(s []string) []string {
+	out := make([]string, len(s), len(s))
+	for k, v := range s {
+		out[k] = strings.TrimSpace(v)
+	}
+	return out
+}

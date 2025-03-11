@@ -20,11 +20,11 @@ const (
 type Mode string
 
 const (
-	NormalMode  Mode = ""
-	StickerMode Mode = "sticker"
-	CaptionMode Mode = "caption"
-	VideoMode   Mode = "video"
-	WebpMode    Mode = "webp"
+	NormalMode    Mode = ""
+	StickerMode   Mode = "sticker"
+	CaptionMode   Mode = "caption"
+	VideoMode     Mode = "video"
+	LegacyGifMode Mode = "gif"
 )
 
 type stickerOpts struct {
@@ -186,6 +186,16 @@ func (c *Payload) WithStickerWidthIncrement(increment int32) *Payload {
 		cp.Opts.Sticker = &stickerOpts{X: cp.Opts.Sticker.X, Y: cp.Opts.Sticker.Y, WidthOffset: cp.Opts.Sticker.WidthOffset + increment}
 	}
 	return &cp
+}
+
+func (c *Payload) SameSubRange(newPayload *Payload) bool {
+	if newPayload.EpisodeID() != c.EpisodeID() {
+		return false
+	}
+	if newPayload.StartPosition != c.StartPosition {
+		return false
+	}
+	return newPayload.EndPosition >= c.EndPosition
 }
 
 // e.g. peepshow-S08E06-1[_4]-{s:1,e:4...}

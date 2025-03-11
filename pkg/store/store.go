@@ -87,7 +87,7 @@ func (s *SRTStore) GetDialogContext(publication string, series int32, episode in
 		series,
 		episode,
 		startPos-1,
-		endPos+1,
+		endPos+3,
 	)
 	if err != nil {
 		return nil, nil, err
