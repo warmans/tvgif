@@ -718,7 +718,7 @@ func (b *Bot) openEditModal(s *discordgo.Session, i *discordgo.InteractionCreate
 							Label:    "Subtitles",
 							Style:    discordgo.TextInputParagraph,
 							Required: false,
-							Value:    strings.Join(content, fmt.Sprintf("\n---\n")),
+							Value:    strings.Join(content, "\n---\n"),
 						},
 					},
 				},
@@ -1193,18 +1193,10 @@ func (b *Bot) createButtons(dialog []model2.Dialog, customID *customid.Payload) 
 }
 
 func (b *Bot) postWebm(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
-	var customText []string
-	for k := range i.Interaction.ModalSubmitData().Components {
-		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
-	}
 	b.postGifWithOptions(s, i, rawCustomID, "", customid.OutputWebp)
 }
 
 func (b *Bot) postWebp(s *discordgo.Session, i *discordgo.InteractionCreate, rawCustomID string) {
-	var customText []string
-	for k := range i.Interaction.ModalSubmitData().Components {
-		customText = append(customText, i.Interaction.ModalSubmitData().Components[k].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value)
-	}
 	b.postGifWithOptions(s, i, rawCustomID, "", customid.OutputWebp)
 }
 

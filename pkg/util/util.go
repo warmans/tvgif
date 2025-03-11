@@ -116,7 +116,7 @@ func NormaliseNumericIdentifier(identifier string) string {
 }
 
 func TrimStrings(s []string) []string {
-	out := make([]string, len(s), len(s))
+	out := make([]string, len(s))
 	for k, v := range s {
 		out[k] = strings.TrimSpace(v)
 	}
