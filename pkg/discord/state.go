@@ -20,34 +20,95 @@ const StateUpdateResetMediaID = StateUpdateType("reset_custom_id")
 const StateUpdateSetExtendOrTrim = StateUpdateType("set_extend_trim")
 const StateUpdateSetShift = StateUpdateType("set_shift")
 const StateUpdateMode = StateUpdateType("set_mode")
+const StateUpdateOutputFormat = StateUpdateType("set_output_format")
 
 type Mode string
 
 const (
-	NormalMode    Mode = ""
-	StickerMode   Mode = "sticker"
-	CaptionMode   Mode = "caption"
-	VideoMode     Mode = "video"
-	LegacyGifMode Mode = "gif"
+	NormalMode  Mode = ""
+	StickerMode Mode = "sticker"
+	CaptionMode Mode = "caption"
+	VideoMode   Mode = "video"
 )
 
 type OutputFileType string
 
 const (
-	OutputGif  = OutputFileType("gif")
-	OutputWebm = OutputFileType("webm")
-	OutputWebp = OutputFileType("webp")
+	OutputDefault = OutputFileType("")
+	OutputGif     = OutputFileType("gif")
+	OutputWebm    = OutputFileType("webm")
+	OutputWebp    = OutputFileType("webp")
 )
 
+type Settings struct {
+	ExtendOrTrim time.Duration  `json:"x,omitempty"`
+	Shift        time.Duration  `json:"s,omitempty"`
+	Mode         Mode           `json:"m,omitempty"`
+	Sticker      *stickerOpts   `json:"t,omitempty"`
+	Caption      string         `json:"c,omitempty"`
+	OverrideSubs []string       `json:"u,omitempty"`
+	SubsEnabled  bool           `json:"d,omitempty"`
+	OutputFormat OutputFileType `json:"o,omitempty"`
+}
+
+// rawSettings is just Settings with simple types used for encoding/decoding
+type rawSettings struct {
+	ExtendOrTrim string         `json:"x,omitempty"`
+	Shift        string         `json:"s,omitempty"`
+	Mode         Mode           `json:"m,omitempty"`
+	Sticker      *stickerOpts   `json:"t,omitempty"`
+	Caption      string         `json:"c,omitempty"`
+	OverrideSubs []string       `json:"u,omitempty"`
+	SubsEnabled  bool           `json:"d,omitempty"`
+	OutputFormat OutputFileType `json:"o,omitempty"`
+}
+
+func (c *Settings) UnmarshalJSON(bytes []byte) error {
+	raw := &rawSettings{}
+	if err := json.Unmarshal(bytes, raw); err != nil {
+		return err
+	}
+
+	var err error
+	c.ExtendOrTrim, err = time.ParseDuration(raw.ExtendOrTrim)
+	if err != nil {
+		return err
+	}
+	c.Shift, err = time.ParseDuration(raw.Shift)
+	if err != nil {
+		return err
+	}
+
+	// todo: this is annoying, these all have to be copied manually
+	// also see MarshalJSON for similar copying
+	c.Mode = raw.Mode
+	c.Sticker = raw.Sticker
+	c.Caption = raw.Caption
+	c.OverrideSubs = raw.OverrideSubs
+	c.SubsEnabled = raw.SubsEnabled
+	c.OutputFormat = raw.OutputFormat
+
+	return nil
+}
+
+func (c *Settings) MarshalJSON() ([]byte, error) {
+	return json.Marshal(rawSettings{
+		ExtendOrTrim: c.ExtendOrTrim.String(),
+		Shift:        c.Shift.String(),
+		Mode:         c.Mode,
+		Sticker:      c.Sticker,
+		Caption:      c.Caption,
+		OverrideSubs: c.OverrideSubs,
+		SubsEnabled:  c.SubsEnabled,
+		OutputFormat: c.OutputFormat,
+	})
+}
+
 type PreviewState struct {
-	ID               *media.ID      `json:"i,omitempty"`
-	Settings         Settings       `json:"x,omitempty"`
-	OriginalTerms    string         `json:"t,omitempty" `
-	OriginalPosition *string        `json:"p,omitempty"`
-	Caption          string         `json:"c,omitempty"`
-	Subs             []string       `json:"s,omitempty"`
-	SubsEnabled      bool           `json:"d,omitempty"`
-	OutputFormat     OutputFileType `json:"o,omitempty"`
+	ID               *media.ID `json:"i,omitempty"`
+	Settings         Settings  `json:"x,omitempty"`
+	OriginalTerms    string    `json:"t,omitempty" `
+	OriginalPosition *string   `json:"p,omitempty"`
 }
 
 func (c *PreviewState) String() string {
@@ -131,18 +192,18 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 	var ok bool
 	switch upd.Type {
 	case StateUpdateSubsEnabled:
-		if c.SubsEnabled, ok = upd.Value.(bool); !ok {
+		if c.Settings.SubsEnabled, ok = upd.Value.(bool); !ok {
 			return fmt.Errorf("%s was not expected type (wanted bool got %T)", upd.Type, upd.Value)
 		}
 	case StateUpdateSetCaption:
-		if c.Caption, ok = upd.Value.(string); !ok {
+		if c.Settings.Caption, ok = upd.Value.(string); !ok {
 			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		}
 	case StateUpdateSetSubs:
 		if subs, ok := upd.Value.([]string); !ok {
 			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		} else {
-			c.Subs = util.TrimStrings(subs)
+			c.Settings.OverrideSubs = util.TrimStrings(subs)
 		}
 	case StateUpdateResetMediaID:
 		rawId, ok := upd.Value.(string)
@@ -172,7 +233,7 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		}
 		if !c.ID.SameSubRange(customID) {
 			// if the customID has changed too much, we have to reset the custom subs
-			c.Subs = nil
+			c.Settings.OverrideSubs = nil
 		}
 
 		// just update the ID without resetting
@@ -197,53 +258,15 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		} else {
 			c.Settings.Mode = Mode(strVal)
 		}
+	case StateUpdateOutputFormat:
+		if strVal, ok := upd.Value.(string); !ok {
+			return fmt.Errorf("%s was not expected type (wanted Mode got %T)", upd.Type, upd.Value)
+		} else {
+			c.Settings.OutputFormat = OutputFileType(strVal)
+		}
 	}
 
 	return nil
-}
-
-type Settings struct {
-	ExtendOrTrim time.Duration `json:"x,omitempty"`
-	Shift        time.Duration `json:"s,omitempty"`
-	Sticker      *stickerOpts  `json:"t,omitempty"`
-	Mode         Mode          `json:"m,omitempty"`
-}
-
-type RawSettings struct {
-	ExtendOrTrim string       `json:"x,omitempty"`
-	Shift        string       `json:"s,omitempty"`
-	Sticker      *stickerOpts `json:"t,omitempty"`
-	Mode         Mode         `json:"m,omitempty"`
-}
-
-func (c *Settings) UnmarshalJSON(bytes []byte) error {
-	raw := &RawSettings{}
-	if err := json.Unmarshal(bytes, raw); err != nil {
-		return err
-	}
-
-	c.Sticker = raw.Sticker
-	c.Mode = raw.Mode
-
-	var err error
-	c.ExtendOrTrim, err = time.ParseDuration(raw.ExtendOrTrim)
-	if err != nil {
-		return err
-	}
-	c.Shift, err = time.ParseDuration(raw.Shift)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Settings) MarshalJSON() ([]byte, error) {
-	return json.Marshal(RawSettings{
-		ExtendOrTrim: c.ExtendOrTrim.String(),
-		Shift:        c.Shift.String(),
-		Sticker:      c.Sticker,
-		Mode:         c.Mode,
-	})
 }
 
 type stickerOpts struct {
@@ -303,6 +326,10 @@ func StateSetShift(duration time.Duration) StateUpdate {
 
 func StateSetMode(mode Mode) StateUpdate {
 	return newStateUpdate(StateUpdateMode, mode)
+}
+
+func StateSetOutputFormat(format OutputFileType) StateUpdate {
+	return newStateUpdate(StateUpdateOutputFormat, format)
 }
 
 func newStateUpdate(kind StateUpdateType, value any) StateUpdate {

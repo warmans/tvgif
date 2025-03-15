@@ -38,17 +38,23 @@ const (
 type Action string
 
 const (
-	ActionConfirmPost         = Action("cfrmg")
+	ActionConfirmPost   = Action("cfrmg")
+	ActionNextResult    = Action("nxt")
+	ActionPrevResult    = Action("prv")
+	ActionUpdateMediaID = Action("upd")
+	ActionUpdateState   = Action("sta")
+)
+
+const (
 	ActionOpenCustomTextModal = Action("cstm")
 	ActionOpenCaptionModal    = Action("ctm")
-	ActionNextResult          = Action("nxt")
-	ActionPrevResult          = Action("prv")
-	ActionUpdateMediaID       = Action("upd")
-	ActionUpdateState         = Action("sta")
-	ActionSetCaption          = Action("sc")
-	ActionSetSubs             = Action("ss")
-	ActionSetExtendValue      = Action("sev")
-	ActionOpenExtendModal     = Action("oem")
+	ActionOpenExtendTrimModal = Action("oem")
+)
+
+const (
+	ModalSetSubs              = Action("m_ss")
+	ModalActionSetExtendValue = Action("m_sev")
+	ModalSetCaption           = Action("m_sc")
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
@@ -61,8 +67,7 @@ var errDuplicateInteraction = errors.New("interaction already processing")
 
 func resolveResponseOptions(opts ...responseOption) *responseOptions {
 	options := &responseOptions{
-		username:       "unknown",
-		outputFileType: OutputWebp,
+		username: "unknown",
 	}
 	for _, o := range opts {
 		o(options)
@@ -71,35 +76,22 @@ func resolveResponseOptions(opts ...responseOption) *responseOptions {
 }
 
 type responseOptions struct {
-	username       string
-	outputFileType OutputFileType
-	placeholder    bool
-	caption        string
+	username    string
+	placeholder bool
+	caption     string
 }
 
 type responseOption func(options *responseOptions)
 
-func withUsername(username string) responseOption {
+func responseWithUsername(username string) responseOption {
 	return func(options *responseOptions) {
 		options.username = username
 	}
 }
 
-func withOutputFileType(kind OutputFileType) responseOption {
-	return func(options *responseOptions) {
-		options.outputFileType = kind
-	}
-}
-
-func withPlaceholder() responseOption {
+func responseWithPlaceholder() responseOption {
 	return func(options *responseOptions) {
 		options.placeholder = true
-	}
-}
-
-func withCaption(caption string) responseOption {
-	return func(options *responseOptions) {
-		options.caption = caption
 	}
 }
 
@@ -194,12 +186,12 @@ func NewBot(
 		ActionOpenCaptionModal:    bot.btnOpenCaptionModal,
 		ActionUpdateMediaID:       bot.btnUpdateMediaID,
 		ActionUpdateState:         bot.btnUpdateState,
-		ActionOpenExtendModal:     bot.btnOpenExtendModal,
+		ActionOpenExtendTrimModal: bot.btnOpenExtendModal,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		ActionSetSubs:        bot.modalSetSubs,
-		ActionSetCaption:     bot.modalSetCaption,
-		ActionSetExtendValue: bot.modalSetExtendTrimValue,
+		ModalSetSubs:              bot.modalSetSubs,
+		ModalSetCaption:           bot.modalSetCaption,
+		ModalActionSetExtendValue: bot.modalSetExtendTrimValue,
 	}
 
 	return bot, nil
@@ -501,8 +493,8 @@ func (b *Bot) updatePreviewWithOptions(
 	interactionResponse, err := b.buildInteractionResponse(
 		dialog,
 		sta,
-		withUsername(username),
-		withPlaceholder(),
+		responseWithUsername(username),
+		responseWithPlaceholder(),
 	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -531,7 +523,7 @@ func (b *Bot) updatePreviewWithOptions(
 		interactionResponse, err = b.buildInteractionResponse(
 			dialog,
 			sta,
-			withUsername(username),
+			responseWithUsername(username),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -576,14 +568,18 @@ func (b *Bot) createGifPreview(
 		ID:               customID,
 		OriginalTerms:    originalTerms,
 		OriginalPosition: util.ToPtr(customID.PositionRange()),
+		// defaults
+		Settings: Settings{
+			OutputFormat: OutputWebp,
+		},
 	}
 
 	// send a placeholder
 	interactionResponse, err := b.buildInteractionResponse(
 		dialog,
 		state,
-		withUsername(username),
-		withPlaceholder(),
+		responseWithUsername(username),
+		responseWithPlaceholder(),
 	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -604,7 +600,7 @@ func (b *Bot) createGifPreview(
 		interactionResponse, err = b.buildInteractionResponse(
 			dialog,
 			state,
-			withUsername(username),
+			responseWithUsername(username),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -668,14 +664,14 @@ func (b *Bot) btnOpenCustomTextModal(s *discordgo.Session, i *discordgo.Interact
 	for k, d := range dialog {
 		content = append(content, d.Content)
 		// override a sub with an existing custom sub
-		if state.Subs != nil && len(state.Subs) > k {
-			content[k] = state.Subs[k]
+		if state.Settings.OverrideSubs != nil && len(state.Settings.OverrideSubs) > k {
+			content[k] = state.Settings.OverrideSubs[k]
 		}
 	}
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID: encodeAction(ActionSetSubs, mediaID),
+			CustomID: encodeAction(ModalSetSubs, mediaID),
 			Title:    "Edit Subs",
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
@@ -718,7 +714,7 @@ func (b *Bot) btnOpenCaptionModal(s *discordgo.Session, i *discordgo.Interaction
 				Style:       discordgo.TextInputParagraph,
 				Required:    true,
 				MaxLength:   128,
-				Value:       state.Caption,
+				Value:       state.Settings.Caption,
 				Placeholder: "Caption added to top of image",
 			},
 		},
@@ -726,7 +722,7 @@ func (b *Bot) btnOpenCaptionModal(s *discordgo.Session, i *discordgo.Interaction
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
-			CustomID:   encodeAction(ActionSetCaption, mediaID),
+			CustomID:   encodeAction(ModalSetCaption, mediaID),
 			Title:      "Set Caption",
 			Components: fields,
 		},
@@ -747,7 +743,7 @@ func (b *Bot) btnOpenExtendModal(s *discordgo.Session, i *discordgo.InteractionC
 		s,
 		i,
 		rawCustomID,
-		ActionSetExtendValue,
+		ModalActionSetExtendValue,
 		"Extend/Trim (Seconds e.g. 1.0/-1.0)",
 		fmt.Sprintf("%0.2f", float64(state.Settings.ExtendOrTrim)/float64(time.Second)),
 	)
@@ -858,6 +854,17 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 				CustomID: encodeAction(ActionUpdateMediaID, state.ID.WithEndPosition(nextMediaID.StartPosition+int64(len(after)))),
 			})
 		}
+		if state.ID.EndPosition > state.ID.StartPosition {
+			navigateButtons = append(navigateButtons, discordgo.Button{
+				Label: "Last Sub",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "✂",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: StateSetMediaID(state.ID.WithEndPosition(state.ID.EndPosition - 1)).CustomID(),
+			})
+		}
 	}
 
 	//todo: need the total duration to avoid shifting past the end of the webm
@@ -908,44 +915,22 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			CustomID: StateSetShift(state.Settings.Shift + time.Second*5).CustomID(),
 		},
 	}
-	extendButtons := []discordgo.MessageComponent{
-		discordgo.Button{
-			Label: "",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: encodeAction(ActionOpenExtendModal, state.ID),
-		},
-	}
+	extendButtons := []discordgo.MessageComponent{}
 
 	if dialogDuration+time.Second <= limits.MaxGifDuration {
 		extendButtons = append(extendButtons, discordgo.Button{
-			Label: "1s",
+			Label: "0.5s",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "➕",
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim + time.Second).CustomID(),
+			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim + (time.Second / 2)).CustomID(),
 		})
 	}
-	trimButtons := []discordgo.MessageComponent{}
-	if dialogDuration-(time.Second/5) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "0.2s",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim - (time.Second / 5)).CustomID(),
-		})
-	}
-	if dialogDuration-(time.Second/2) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "0.5s",
+	if dialogDuration-time.Second > 0 {
+		extendButtons = append(extendButtons, discordgo.Button{
+			Label: "-0.5s",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "✂",
 			},
@@ -954,39 +939,61 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim - (time.Second / 2)).CustomID(),
 		})
 	}
-	if dialogDuration-time.Second > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "1s",
+	extendButtons = append(extendButtons, discordgo.Button{
+		Label: "Custom",
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "➕",
+		},
+		Style:    discordgo.SecondaryButton,
+		Disabled: false,
+		CustomID: encodeAction(ActionOpenExtendTrimModal, state.ID),
+	})
+	formatButtons := []discordgo.MessageComponent{
+		discordgo.Button{
+			Label: "WebP",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
+				Name: "🖼️",
 			},
-			Style:    discordgo.SecondaryButton,
+			Style:    successBtnIfTrue(state.Settings.OutputFormat == OutputWebp || state.Settings.OutputFormat == OutputDefault),
 			Disabled: false,
-			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim - time.Second).CustomID(),
-		})
-	}
-	if dialogDuration-(time.Second*5) > 0 {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "5s",
+			CustomID: StateSetOutputFormat(OutputWebp).CustomID(),
+		},
+		discordgo.Button{
+			Label: "Gif",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
+				Name: "🖼️",
 			},
-			Style:    discordgo.SecondaryButton,
+			Style:    successBtnIfTrue(state.Settings.OutputFormat == OutputGif),
 			Disabled: false,
-			CustomID: StateSetExtendOrTrim(state.Settings.ExtendOrTrim - time.Second*5).CustomID(),
-		})
-	}
-
-	if state.ID.StartPosition != state.ID.EndPosition {
-		trimButtons = append(trimButtons, discordgo.Button{
-			Label: "Merged Subtitles",
+			CustomID: StateSetOutputFormat(OutputGif).CustomID(),
+		},
+		//discordgo.Button{
+		//	Label: "Sticker",
+		//	Emoji: &discordgo.ComponentEmoji{
+		//		Name: "🎨",
+		//	},
+		//	Style:    successBtnIfTrue(state.Settings.Mode == StickerMode),
+		//	Disabled: false,
+		//	CustomID: StateSetMode(StickerMode).CustomID(),
+		//},
+		discordgo.Button{
+			Label: "Normal",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "✂",
+				Name: "🎨",
 			},
-			Style:    discordgo.SecondaryButton,
+			Style:    successBtnIfTrue(state.Settings.Mode == NormalMode),
 			Disabled: false,
-			CustomID: StateSetMediaID(state.ID.WithEndPosition(state.ID.StartPosition)).CustomID(),
-		})
+			CustomID: StateSetMode(NormalMode).CustomID(),
+		},
+		discordgo.Button{
+			Label: "Caption",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎨",
+			},
+			Style:    successBtnIfTrue(state.Settings.Mode == CaptionMode),
+			Disabled: false,
+			CustomID: StateSetMode(CaptionMode).CustomID(),
+		},
 	}
 
 	const panIncrementLarge = 50
@@ -1062,52 +1069,8 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			Label:    "Toggle Subs",
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: StateSetSubsEnabled(!state.SubsEnabled).CustomID(),
+			CustomID: StateSetSubsEnabled(!state.Settings.SubsEnabled).CustomID(),
 		})
-	}
-
-	var modeSelectBtn discordgo.Button
-	switch state.Settings.Mode {
-	case NormalMode:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Sticker)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🖼",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: StateSetMode(StickerMode).CustomID(),
-		}
-	case StickerMode:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Caption)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🖼",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: StateSetMode(CaptionMode).CustomID(),
-		}
-	case CaptionMode:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Legacy GIF)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎦",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: StateSetMode(LegacyGifMode).CustomID(),
-		}
-	default:
-		modeSelectBtn = discordgo.Button{
-			Label: "Next Mode (Normal)",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🖼",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: StateSetMode(NormalMode).CustomID(),
-		}
 	}
 
 	postActions := []discordgo.MessageComponent{discordgo.Button{
@@ -1119,20 +1082,19 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 		Disabled: false,
 		CustomID: encodeAction(ActionConfirmPost, state.ID),
 	}}
-	//if customID.Opts.Mode != customid.StickerMode {
-	postActions = append(postActions, discordgo.Button{
-		Label: "Edit Subs",
-		Emoji: &discordgo.ComponentEmoji{
-			Name: "📝",
-		},
-		Style:    discordgo.SecondaryButton,
-		Disabled: false,
-		CustomID: encodeAction(ActionOpenCustomTextModal, state.ID),
-	})
-	//}
+	if state.Settings.Mode != StickerMode {
+		postActions = append(postActions, discordgo.Button{
+			Label: "Edit Subs",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "📝",
+			},
+			Style:    successBtnIfTrue(state.Settings.OverrideSubs != nil),
+			Disabled: false,
+			CustomID: encodeAction(ActionOpenCustomTextModal, state.ID),
+		})
+	}
 
 	postActions = append(postActions,
-		modeSelectBtn,
 		discordgo.Button{
 			Label: "Prev Result",
 			Emoji: &discordgo.ComponentEmoji{
@@ -1154,7 +1116,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 	)
 
 	actions := []discordgo.MessageComponent{}
-	if len(navigateButtons) > 0 && state.Settings.Mode == NormalMode || state.Settings.Mode == LegacyGifMode {
+	if len(navigateButtons) > 0 && state.Settings.Mode == NormalMode {
 		actions = append(actions, discordgo.ActionsRow{Components: navigateButtons})
 	}
 	if len(shiftButtons) > 0 && state.Settings.Mode != CaptionMode {
@@ -1163,14 +1125,14 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 	if len(extendButtons) > 0 && state.Settings.Mode != CaptionMode {
 		actions = append(actions, discordgo.ActionsRow{Components: extendButtons})
 	}
-	if len(trimButtons) > 0 && state.Settings.Mode != CaptionMode {
-		actions = append(actions, discordgo.ActionsRow{Components: trimButtons})
-	}
 	if len(stickerButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: stickerButtons})
 	}
 	if len(captionButtons) > 0 {
 		actions = append(actions, discordgo.ActionsRow{Components: captionButtons})
+	}
+	if len(formatButtons) > 0 {
+		actions = append(actions, discordgo.ActionsRow{Components: formatButtons})
 	}
 	actions = append(actions, discordgo.ActionsRow{Components: postActions})
 
@@ -1276,114 +1238,6 @@ func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 	}
 }
 
-func (b *Bot) postGifWithOptions(
-	s *discordgo.Session,
-	i *discordgo.InteractionCreate,
-	rawMediaID string,
-	caption string,
-	outputFormat OutputFileType,
-) {
-	if rawMediaID == "" {
-		b.respondError(s, i, fmt.Errorf("missing mediaID"))
-		return
-	}
-	mediaID, err := media.ParseMediaID(rawMediaID)
-	if err != nil {
-		b.respondError(s, i, fmt.Errorf("invalid mediaID"))
-		return
-	}
-	dialog, err := b.srtStore.GetDialogRange(
-		mediaID.Publication,
-		mediaID.Series,
-		mediaID.Episode,
-		mediaID.StartPosition,
-		mediaID.EndPosition,
-	)
-	if err != nil {
-		b.respondError(
-			s,
-			i,
-			fmt.Errorf("failed to fetch selected lines: %s", mediaID.String()),
-			slog.String("err", err.Error()),
-			slog.String("custom_id", rawMediaID),
-		)
-		return
-	}
-
-	if err := b.completeResponse(s, i, dialog, uniqueUser(i.Member, i.User), outputFormat, caption); err != nil {
-		b.logger.Error(
-			"Failed to complete media response",
-			slog.String("err", err.Error()),
-			slog.String("format", string(outputFormat)),
-		)
-	}
-}
-
-func (b *Bot) completeResponse(
-	s *discordgo.Session,
-	i *discordgo.InteractionCreate,
-	dialog []model2.Dialog,
-	username string,
-	outputFormat OutputFileType,
-	caption string,
-) error {
-
-	state, err := extractStateFromBody(i.Message.Content)
-	if err != nil {
-		return fmt.Errorf("failed to get current state")
-	}
-
-	interactionResponse, err := b.buildInteractionResponse(
-		dialog,
-		state,
-		withUsername(username),
-		withPlaceholder(),
-		withOutputFileType(outputFormat),
-	)
-	if err != nil {
-		if errors.Is(err, errDuplicateInteraction) {
-			b.logger.Warn("Ignored duplicated interaction")
-			return nil
-		}
-		if errors.Is(err, errRenderInProgress) {
-			b.respondError(s, i, errors.New("you already have a render in progress"))
-		}
-		b.respondError(s, i, err)
-		return err
-	}
-	if err = s.InteractionRespond(i.Interaction, interactionResponse); err != nil {
-		return fmt.Errorf("failed to respond: %w", err)
-	}
-	go func() {
-		interactionResponse, err = b.buildInteractionResponse(
-			dialog,
-			state,
-			withUsername(username),
-			withOutputFileType(outputFormat),
-			withCaption(caption))
-		if err != nil {
-			if errors.Is(err, errDuplicateInteraction) {
-				return
-			}
-			b.logger.Error("interaction failed", slog.String("err", err.Error()))
-			_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: util.ToPtr("Failed....")})
-			if err != nil {
-				b.logger.Error("edit failed", slog.String("err", err.Error()))
-			}
-			return
-		}
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: util.ToPtr(interactionResponse.Data.Content),
-			Files:   interactionResponse.Data.Files,
-		})
-		if err != nil {
-			b.logger.Error("edit failed", slog.String("err", err.Error()))
-		}
-	}()
-
-	return nil
-}
-
 func (b *Bot) buildInteractionResponse(
 	dialog []model2.Dialog,
 	state *PreviewState,
@@ -1429,7 +1283,7 @@ func (b *Bot) buildInteractionResponse(
 			Content: fmt.Sprintf(
 				"%s\n\n%s\n%s%s",
 				bodyText,
-				b.gifDescription(state, opts.username, dialog, state.Subs != nil),
+				b.gifDescription(state, opts.username, dialog, state.Settings.OverrideSubs != nil),
 				mustEncodeState(state),
 				info,
 			),
@@ -1496,7 +1350,7 @@ func (b *Bot) renderFile(
 	state *PreviewState,
 	dialog []model2.Dialog,
 ) (*discordgo.File, error) {
-	disableCaching := state.Settings.ExtendOrTrim != 0 || state.Settings.Shift != 0 || state.Subs != nil || (state.Settings.Mode != NormalMode && state.Settings.Mode != LegacyGifMode)
+	disableCaching := state.Settings.ExtendOrTrim != 0 || state.Settings.Shift != 0 || state.Settings.OverrideSubs != nil || (state.Settings.Mode != NormalMode)
 
 	startTimestamp := dialog[0].StartTimestamp
 	endTimestamp := dialog[len(dialog)-1].EndTimestamp
@@ -1520,22 +1374,22 @@ func (b *Bot) renderFile(
 		slog.String("source", dialog[0].VideoFileName),
 		slog.Duration("from", startTimestamp),
 		slog.Duration("to", endTimestamp),
-		slog.String("output", string(state.OutputFormat)),
-		slog.Bool("custom_text", state.Subs != nil),
+		slog.String("output", string(state.Settings.OutputFormat)),
+		slog.Bool("custom_text", state.Settings.OverrideSubs != nil),
 	)
 	logger.Debug("Rendering file...")
 
 	options := []render.Option{
 		render.WithCaching(disableCaching),
-		render.WithCustomText(state.Subs),
+		render.WithCustomText(state.Settings.OverrideSubs),
 		render.WithStartTimestamp(startTimestamp),
 		render.WithEndTimestamp(endTimestamp),
 	}
 	if state.Settings.Mode == CaptionMode {
 		options = append(options,
 			render.WithCaptionMode(true),
-			render.WithCaption(state.Caption),
-			render.WithDisableSubs(state.SubsEnabled),
+			render.WithCaption(state.Settings.Caption),
+			render.WithDisableSubs(state.Settings.SubsEnabled),
 		)
 	}
 	if state.Settings.Mode == StickerMode {
@@ -1552,8 +1406,13 @@ func (b *Bot) renderFile(
 			render.WithStickerMode(true, opts),
 		)
 	}
-	if state.Settings.Mode == LegacyGifMode {
+	switch state.Settings.OutputFormat {
+	case OutputGif:
 		options = append(options, render.WithOutputFileType(render.OutputGif))
+	case OutputWebm:
+		options = append(options, render.WithOutputFileType(render.OutputWebm))
+	default:
+		options = append(options, render.WithOutputFileType(render.OutputWebp))
 	}
 
 	file, err := b.renderer.RenderFile(
@@ -1745,4 +1604,11 @@ func extractStateFromBody(msgContent string) (*PreviewState, error) {
 	}
 
 	return state, nil
+}
+
+func successBtnIfTrue(condition bool) discordgo.ButtonStyle {
+	if condition {
+		return discordgo.SuccessButton
+	}
+	return discordgo.SecondaryButton
 }
