@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
-	"github.com/warmans/tvgif/pkg/discord/customid"
+	"github.com/warmans/tvgif/pkg/discord/media"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	model2 "github.com/warmans/tvgif/pkg/model"
 	"io"
@@ -15,9 +15,31 @@ import (
 	"time"
 )
 
+type OutputFileType string
+
+const (
+	OutputWebp OutputFileType = "webp"
+	OutputWebm OutputFileType = "webm"
+	OutputGif  OutputFileType = "gif"
+)
+
+type SpecialMode string
+
+const (
+	NormalMode  SpecialMode = ""
+	StickerMode SpecialMode = "string"
+	CaptionMode SpecialMode = "caption"
+)
+
+type StickerModeOpts struct {
+	X           int32 `json:"x,omitempty"`
+	Y           int32 `json:"y,omitempty"`
+	WidthOffset int32 `json:"w,omitempty"`
+}
+
 func resolveRenderOpts(opt ...Option) *renderOpts {
 	opts := &renderOpts{
-		outputFileType: customid.OutputWebp,
+		outputFileType: OutputWebp,
 	}
 
 	for _, v := range opt {
@@ -28,16 +50,18 @@ func resolveRenderOpts(opt ...Option) *renderOpts {
 }
 
 type renderOpts struct {
-	startTimestamp time.Duration
-	endTimestamp   time.Duration
-	outputFileType customid.OutputFileType
-	disableCaching bool
-	customText     []string
-	caption        string
-	disableSubs    bool
+	startTimestamp  time.Duration
+	endTimestamp    time.Duration
+	outputFileType  OutputFileType
+	disableCaching  bool
+	customText      []string
+	caption         string
+	disableSubs     bool
+	specialMode     SpecialMode
+	stickerModeOpts *StickerModeOpts
 }
 
-func WithOutputFileType(tp customid.OutputFileType) Option {
+func WithOutputFileType(tp OutputFileType) Option {
 	return func(opts *renderOpts) {
 		opts.outputFileType = tp
 	}
@@ -82,6 +106,28 @@ func WithDisableSubs(disable bool) Option {
 	}
 }
 
+func WithStickerMode(enable bool, stickerOpts *StickerModeOpts) Option {
+	return func(opts *renderOpts) {
+		if enable {
+			opts.specialMode = StickerMode
+			opts.stickerModeOpts = stickerOpts
+		} else {
+			opts.specialMode = NormalMode
+			opts.stickerModeOpts = nil
+		}
+	}
+}
+
+func WithCaptionMode(enable bool) Option {
+	return func(opts *renderOpts) {
+		if enable {
+			opts.specialMode = CaptionMode
+		} else {
+			opts.specialMode = NormalMode
+		}
+	}
+}
+
 type Option func(opts *renderOpts)
 
 type drawTextOpts struct {
@@ -113,7 +159,7 @@ type Renderer struct {
 
 func (r *Renderer) RenderFile(
 	videoFileName string,
-	customID *customid.Payload,
+	customID *media.ID,
 	dialog []model2.Dialog,
 	opt ...Option,
 ) (*discordgo.File, error) {
@@ -126,7 +172,7 @@ func (r *Renderer) RenderFile(
 
 	var err error
 	switch opts.outputFileType {
-	case customid.OutputWebm:
+	case OutputWebm:
 		mimeType = "video/webm"
 		extension = "webm"
 		_, err = r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching, func(writer io.Writer) error {
@@ -145,8 +191,7 @@ func (r *Renderer) RenderFile(
 								!opts.disableSubs,
 								createDrawtextFilter(
 									dialog,
-									opts.customText,
-									customID.Opts,
+									opts,
 									withSimpsonsFont(customID.Publication == "simpsons"),
 								),
 							),
@@ -158,11 +203,11 @@ func (r *Renderer) RenderFile(
 			}
 			return nil
 		})
-	case customid.OutputGif, customid.OutputWebp:
+	case OutputGif, OutputWebp:
 		mimeType = "image/gif"
 		extension = "gif"
 		format := "gif"
-		if opts.outputFileType == customid.OutputWebp && customID.Opts.Mode != customid.StickerMode {
+		if opts.outputFileType == OutputWebp {
 			mimeType = "image/webp"
 			extension = "webp"
 			format = "webp"
@@ -182,14 +227,13 @@ func (r *Renderer) RenderFile(
 								!opts.disableSubs,
 								createDrawtextFilter(
 									dialog,
-									opts.customText,
-									customID.Opts,
+									opts,
 									withSimpsonsFont(customID.Publication == "simpsons"),
 								),
 							),
-							createCropFilter(customID.Opts),
-							createResizeFilter(customID.Opts),
-							createScaleFilter(customID.Opts),
+							createStickerCropFilter(opts),
+							createStickerResizeFilter(opts),
+							createCaptionScaleFilter(opts),
 							createDrawtextCaptionFilter(opts.caption),
 						),
 						// for some reason this is necessary for discord to display webp images.
@@ -215,20 +259,20 @@ func (r *Renderer) RenderFile(
 	}, nil
 }
 
-func createDrawtextFilter(dialog []model2.Dialog, customText []string, cidOpts customid.Opts, opts ...drawTextOpt) string {
+func createDrawtextFilter(dialog []model2.Dialog, renderOpts *renderOpts, opts ...drawTextOpt) string {
 	options := &drawTextOpts{boxOpacity: 0.5, fontSize: 18}
 	for _, v := range opts {
 		v(options)
 	}
-	if cidOpts.Mode == customid.StickerMode {
+	if renderOpts.specialMode == StickerMode {
 		return ""
 	}
 	drawTextCommands := []string{}
 	timestampOffsets := dialog[0].StartTimestamp
 	for k, line := range dialog {
 		dialogText := line.Content
-		if len(customText) > k {
-			dialogText = customText[k]
+		if len(renderOpts.customText) > k {
+			dialogText = renderOpts.customText[k]
 		}
 		startSecond := line.StartTimestamp - timestampOffsets
 		endSecond := line.EndTimestamp - timestampOffsets
@@ -278,29 +322,29 @@ func createDrawtextCaptionFilter(caption string) string {
 	return strings.Join(drawTextCommands, ", ")
 }
 
-func createCropFilter(opts customid.Opts) string {
-	if opts.Mode != customid.StickerMode {
+func createStickerCropFilter(opts *renderOpts) string {
+	if opts.specialMode != StickerMode || opts.stickerModeOpts == nil {
 		return ""
 	}
-	if opts.Sticker.X > 0 || opts.Sticker.Y > 0 || opts.Sticker.WidthOffset != 0 {
+	if opts.stickerModeOpts.X > 0 || opts.stickerModeOpts.Y > 0 || opts.stickerModeOpts.WidthOffset != 0 {
 		diameter := int32(336)
-		if opts.Sticker.WidthOffset != 0 {
-			diameter = 336 + opts.Sticker.WidthOffset
+		if opts.stickerModeOpts.WidthOffset != 0 {
+			diameter = 336 + opts.stickerModeOpts.WidthOffset
 		}
-		return fmt.Sprintf("crop=w=%d:h=%d:x=%d:y=%d", diameter, diameter, opts.Sticker.X, opts.Sticker.Y)
+		return fmt.Sprintf("crop=w=%d:h=%d:x=%d:y=%d", diameter, diameter, opts.stickerModeOpts.X, opts.stickerModeOpts.Y)
 	}
 	return "crop=w=336:h=336"
 }
 
-func createResizeFilter(opts customid.Opts) string {
-	if opts.Mode != customid.StickerMode {
+func createStickerResizeFilter(opts *renderOpts) string {
+	if opts.specialMode != StickerMode {
 		return ""
 	}
 	return "scale=160:160"
 }
 
-func createScaleFilter(opts customid.Opts) string {
-	if opts.Mode != customid.CaptionMode {
+func createCaptionScaleFilter(opts *renderOpts) string {
+	if opts.specialMode != CaptionMode {
 		return ""
 	}
 	return "scale=421:238:force_original_aspect_ratio=decrease,pad=596:336:(ow-iw)/2:(oh-ih)/2+30,setsar=1"
@@ -329,7 +373,7 @@ func dropEmptyFilters(filters []string) []string {
 	return clean
 }
 
-func createFileName(customID *customid.Payload, suffix string) string {
+func createFileName(customID *media.ID, suffix string) string {
 	return fmt.Sprintf("%s.%s", customID.DialogID(), suffix)
 }
 
