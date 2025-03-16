@@ -122,3 +122,7 @@ func TrimStrings(s []string) []string {
 	}
 	return out
 }
+
+func CleanDialogLine(s string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.Join(strings.Split(s, "\n"), " "), "-"))
+}

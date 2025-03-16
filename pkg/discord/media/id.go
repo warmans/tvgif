@@ -66,8 +66,8 @@ func (i *ID) WithEndPosition(end int64) *ID {
 	return &cp
 }
 
-// e.g. peepshow-S08E06-1[_4]-{s:1,e:4...}
-func ParseMediaID(payloadStr string) (*ID, error) {
+// ParseID e.g. peepshow-S08E06-1[_4]
+func ParseID(payloadStr string) (*ID, error) {
 
 	parts := strings.SplitN(payloadStr, "-", 4)
 	if len(parts) < 3 {
@@ -101,12 +101,6 @@ func ParseMediaID(payloadStr string) (*ID, error) {
 		}
 		payload.EndPosition = max(int64(endPosition), payload.StartPosition)
 	}
-
-	//if len(parts) > 3 && parts[3] != "" {
-	//	if err := json.Unmarshal([]byte(parts[3]), &payload.Opts); err != nil {
-	//		return nil, err
-	//	}
-	//}
 
 	return payload, nil
 }

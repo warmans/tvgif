@@ -210,7 +210,7 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		if !ok {
 			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		}
-		customID, err := media.ParseMediaID(rawId)
+		customID, err := media.ParseID(rawId)
 		if err != nil {
 			return fmt.Errorf("failed to parse customID (%s): %w", customID, err)
 		}
@@ -227,7 +227,7 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		if !ok {
 			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		}
-		customID, err := media.ParseMediaID(rawId)
+		customID, err := media.ParseID(rawId)
 		if err != nil {
 			return fmt.Errorf("failed to parse customID (%s): %w", customID, err)
 		}
