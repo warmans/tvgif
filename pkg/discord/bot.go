@@ -77,7 +77,6 @@ func resolveResponseOptions(opts ...responseOption) *responseOptions {
 type responseOptions struct {
 	username    string
 	placeholder bool
-	caption     string
 	preview     bool
 }
 
@@ -1162,8 +1161,8 @@ func (b *Bot) stickerButtons(state *PreviewState) []discordgo.MessageComponent {
 	return stickerButtons
 }
 
-func (b *Bot) btnUpdateState(s *discordgo.Session, i *discordgo.InteractionCreate, rawMediaID string) {
-	update, err := decodeUpdateStateAction(rawMediaID)
+func (b *Bot) btnUpdateState(s *discordgo.Session, i *discordgo.InteractionCreate, payload string) {
+	update, err := decodeUpdateStateAction(payload)
 	if err != nil {
 		b.respondError(s, i, fmt.Errorf("failed to decode state update: %w", err))
 		return
