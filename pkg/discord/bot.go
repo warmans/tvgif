@@ -1200,6 +1200,10 @@ func (b *Bot) handleModalSetExtendTrimValue(s *discordgo.Session, i *discordgo.I
 		b.respondError(s, i, fmt.Errorf("invalid extend/trim value %s: %w", strVal, err))
 		return
 	}
+	if floatVal > float64(limits.MaxGifDuration) {
+		b.respondError(s, i, fmt.Errorf("invalid extend/trim value %s: cannot exceed max gif duration", strVal, err))
+		return
+	}
 
 	b.updatePreview(s, i, StateSetExtendOrTrim(time.Duration(floatVal*float64(time.Second))))
 }
