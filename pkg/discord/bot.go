@@ -1686,7 +1686,7 @@ func (d *DialogWithContext) String() string {
 		fmt.Fprintf(out, "> %s (%s)\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
 	}
 	for _, v := range d.Dialog {
-		fmt.Fprintf(out, "> **%s (%s)**\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
+		fmt.Fprintf(out, ">> %s (%s)\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
 	}
 	for _, v := range d.After {
 		fmt.Fprintf(out, "> %s (%s)\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
