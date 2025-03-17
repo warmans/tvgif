@@ -124,5 +124,5 @@ func TrimStrings(s []string) []string {
 }
 
 func CleanDialogLine(s string) string {
-	return strings.TrimSpace(strings.Trim(strings.Join(strings.Split(s, "\n"), " "), "-#*"))
+	return strings.TrimSpace(strings.Join(strings.Split(s, "\n"), " "))
 }

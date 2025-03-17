@@ -1681,6 +1681,7 @@ type DialogWithContext struct {
 
 func (d *DialogWithContext) String() string {
 	out := &strings.Builder{}
+	out.WriteString("```")
 	for _, v := range d.Before {
 		fmt.Fprintf(out, "> %s (%s)\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
 	}
@@ -1690,5 +1691,6 @@ func (d *DialogWithContext) String() string {
 	for _, v := range d.After {
 		fmt.Fprintf(out, "> %s (%s)\n", util.CleanDialogLine(v.Content), (v.EndTimestamp - v.StartTimestamp).String())
 	}
+	out.WriteString("```")
 	return out.String()
 }
