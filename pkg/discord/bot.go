@@ -1479,7 +1479,11 @@ func (b *Bot) helpText(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		sb := &strings.Builder{}
 		sb.WriteString("Available Publications: \n")
 		for _, v := range publications {
-			if _, err := fmt.Fprintf(sb, "* `%s` - `S[%s]`\n", v.Name, strings.Join(v.Series, ", ")); err != nil {
+			groupStr := ""
+			if v.Group != "" {
+				groupStr = fmt.Sprintf(" (~%s)", v.Group)
+			}
+			if _, err := fmt.Fprintf(sb, "* `%s%s` - `S[%s]`\n", v.Name, groupStr, strings.Join(v.Series, ", ")); err != nil {
 				b.respondError(s, i, err)
 				return
 			}
