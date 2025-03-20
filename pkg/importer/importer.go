@@ -25,6 +25,7 @@ type pendingFile struct {
 func NewIncrementalImporter(
 	srtDir string,
 	metadataDir string,
+	varDir string,
 	conn *store.Conn,
 	searcher *search.BlugeSearch,
 	logger *slog.Logger,
@@ -33,6 +34,7 @@ func NewIncrementalImporter(
 	return &Incremental{
 		srtDir:         srtDir,
 		metadataDir:    metadataDir,
+		varDir:         varDir,
 		conn:           conn,
 		searcher:       searcher,
 		logger:         logger,
@@ -43,6 +45,7 @@ func NewIncrementalImporter(
 type Incremental struct {
 	srtDir         string
 	metadataDir    string
+	varDir         string
 	conn           *store.Conn
 	searcher       *search.BlugeSearch
 	logger         *slog.Logger
@@ -188,7 +191,7 @@ func (i *Incremental) importNewSRT(ctx context.Context, pendingFiles []pendingFi
 
 	for k, pending := range pendingFiles {
 		err := i.conn.WithTx(func(tx *sqlx.Tx) error {
-			meta, err := metadata.CreateMetadataFromSRT(pending.srtFilePath, i.metadataDir)
+			meta, err := metadata.CreateMetadataFromSRT(pending.srtFilePath, i.metadataDir, i.varDir)
 			if err != nil {
 				return fmt.Errorf("failed to create metadata: %w", err)
 			}

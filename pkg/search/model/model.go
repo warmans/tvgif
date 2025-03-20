@@ -8,16 +8,17 @@ import (
 )
 
 type DialogDocument struct {
-	ID             string `json:"id"`
-	Pos            int32  `json:"pos"`
-	EpisodeID      string `json:"episode_id"`
-	Publication    string `json:"publication"`
-	Series         int32  `json:"series"`
-	Episode        int32  `json:"episode"`
-	StartTimestamp int64  `json:"start_timestamp"`
-	EndTimestamp   int64  `json:"end_timestamp"`
-	VideoFileName  string `json:"video_file_name"`
-	Content        string `json:"content"`
+	ID               string `json:"id"`
+	Pos              int32  `json:"pos"`
+	EpisodeID        string `json:"episode_id"`
+	Publication      string `json:"publication"`
+	PublicationGroup string `json:"publication_group"`
+	Series           int32  `json:"series"`
+	Episode          int32  `json:"episode"`
+	StartTimestamp   int64  `json:"start_timestamp"`
+	EndTimestamp     int64  `json:"end_timestamp"`
+	VideoFileName    string `json:"video_file_name"`
+	Content          string `json:"content"`
 }
 
 func (d *DialogDocument) ShortEpisodeID() string {
@@ -26,16 +27,17 @@ func (d *DialogDocument) ShortEpisodeID() string {
 
 func (d *DialogDocument) FieldMapping() map[string]mapping.FieldType {
 	return map[string]mapping.FieldType{
-		"_id":             mapping.FieldTypeKeyword,
-		"pos":             mapping.FieldTypeNumber,
-		"episode_id":      mapping.FieldTypeKeyword,
-		"publication":     mapping.FieldTypeKeyword,
-		"series":          mapping.FieldTypeNumber,
-		"episode":         mapping.FieldTypeNumber,
-		"start_timestamp": mapping.FieldTypeNumber,
-		"end_timestamp":   mapping.FieldTypeNumber,
-		"video_file_name": mapping.FieldTypeText,
-		"content":         mapping.FieldTypeText,
+		"_id":               mapping.FieldTypeKeyword,
+		"pos":               mapping.FieldTypeNumber,
+		"episode_id":        mapping.FieldTypeKeyword,
+		"publication":       mapping.FieldTypeKeyword,
+		"publication_group": mapping.FieldTypeKeyword,
+		"series":            mapping.FieldTypeNumber,
+		"episode":           mapping.FieldTypeNumber,
+		"start_timestamp":   mapping.FieldTypeNumber,
+		"end_timestamp":     mapping.FieldTypeNumber,
+		"video_file_name":   mapping.FieldTypeText,
+		"content":           mapping.FieldTypeText,
 	}
 }
 
@@ -53,6 +55,8 @@ func (d *DialogDocument) GetNamedField(name string) any {
 		return d.EpisodeID
 	case "publication":
 		return d.Publication
+	case "publication_group":
+		return d.PublicationGroup
 	case "series":
 		return d.Series
 	case "episode":
@@ -79,6 +83,8 @@ func (d *DialogDocument) SetNamedField(name string, value any) {
 		d.EpisodeID = string(value.([]byte))
 	case "publication":
 		d.Publication = string(value.([]byte))
+	case "publication_group":
+		d.PublicationGroup = string(value.([]byte))
 	case "series":
 		d.Series = int32(bytesToFloatOrZero(value))
 	case "episode":

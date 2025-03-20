@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/warmans/tvgif/pkg/limits"
 	"github.com/warmans/tvgif/pkg/model"
@@ -18,19 +19,31 @@ var filePatternRegex = regexp.MustCompile(`(?P<publication>[a-zA-Z0-9]+)-S(?P<se
 
 const videoExtension = ".webm"
 
-func CreateMetadataFromSRT(srtPath, metadataDir string) (*model.Episode, error) {
+const publicationAliasFile = "publications_aliases.json"
+
+func CreateMetadataFromSRT(srtPath, metadataDir, varDir string) (*model.Episode, error) {
 
 	srtName := path.Base(srtPath)
+
+	publicationMapping, err := readPublicationMapping(varDir)
+	if err != nil {
+		return nil, err
+	}
 
 	meta := &model.Episode{
 		SRTFile:   srtName,
 		VideoFile: fmt.Sprintf("%s.%s", strings.TrimSuffix(path.Base(srtName), ".srt"), strings.TrimPrefix(videoExtension, ".")),
 	}
-	var err error
 	meta.Publication, meta.Series, meta.Episode, err = parseFileName(filePatternRegex, srtName)
 	if err != nil {
 		return nil, err
 	}
+
+	// allow a publication to be assigned a group for an aliases file
+	if publicationGroup, ok := publicationMapping[meta.Publication]; ok {
+		meta.PublicationGroup = publicationGroup
+	}
+
 	fileName := fmt.Sprintf("%s.json", meta.ID())
 	metaPath := path.Join(metadataDir, fileName)
 
@@ -43,6 +56,18 @@ func CreateMetadataFromSRT(srtPath, metadataDir string) (*model.Episode, error) 
 		return nil, fmt.Errorf("failed to write metadata: %w", err)
 	}
 	return meta, nil
+}
+
+func readPublicationMapping(metadataDir string) (map[string]string, error) {
+	data, err := os.ReadFile(path.Join(metadataDir, publicationAliasFile))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("failed to read %s: %w", publicationAliasFile, err)
+	}
+	var result map[string]string
+	return result, json.Unmarshal(data, &result)
 }
 
 func writeMetadata(path string, e *model.Episode) error {

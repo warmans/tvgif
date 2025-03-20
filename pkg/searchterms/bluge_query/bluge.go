@@ -31,11 +31,26 @@ type BlugeQuery struct {
 }
 
 func (j *BlugeQuery) And(term searchterms.Term) error {
-	cond, err := j.condition(term.Field, term.Op, term.Value)
-	if err != nil {
-		return err
+	if len(term.Field) == 1 {
+		cond, err := j.condition(term.Field[0], term.Op, term.Value)
+		if err != nil {
+			return err
+		}
+		j.q.AddMust(cond)
+		return nil
 	}
-	j.q.AddMust(cond)
+
+	orQuery := bluge.NewBooleanQuery()
+	for _, field := range term.Field {
+		cond, err := j.condition(field, term.Op, term.Value)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s should %s %s\n", field, term.Op, term.Value.String())
+		orQuery = orQuery.AddShould(cond)
+	}
+	j.q.AddMust(orQuery)
+
 	return nil
 }
 
@@ -72,8 +87,6 @@ func (j *BlugeQuery) condition(field string, op searchterms.CompOp, value search
 			q.SetField(field)
 			return q, nil
 		case searchterms.StringType:
-			// todo: how to handle dates? they don't have a special type so we would need to look
-			// at the document mapping
 			q := bluge.NewTermRangeQuery(stripQuotes(value.String()), "")
 			q.SetField(field)
 			return q, nil
@@ -91,8 +104,6 @@ func (j *BlugeQuery) condition(field string, op searchterms.CompOp, value search
 			q.SetField(field)
 			return q, nil
 		case searchterms.StringType:
-			// todo: how to handle dates? they don't have a special type so we would need to look
-			// at the bleve mapping
 			q := bluge.NewTermRangeQuery("", stripQuotes(value.String()))
 			q.SetField(field)
 			return q, nil
@@ -110,8 +121,6 @@ func (j *BlugeQuery) condition(field string, op searchterms.CompOp, value search
 			q.SetField(field)
 			return q, nil
 		case searchterms.StringType:
-			// todo: how to handle dates? they don't have a special type so we would need to look
-			// at the mapping
 			q := bluge.NewTermRangeInclusiveQuery(stripQuotes(value.String()), "", true, true)
 			q.SetField(field)
 			return q, nil
@@ -129,8 +138,6 @@ func (j *BlugeQuery) condition(field string, op searchterms.CompOp, value search
 			q.SetField(field)
 			return q, nil
 		case searchterms.StringType:
-			// todo: how to handle dates? they don't have a special type so we would need to look
-			// at the bleve mapping
 			q := bluge.NewTermRangeInclusiveQuery("", stripQuotes(value.String()), true, true)
 			q.SetField(field)
 			return q, nil

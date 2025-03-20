@@ -26,13 +26,14 @@ func (e *Dialog) ID(episodeID string) string {
 }
 
 type Episode struct {
-	SRTFile     string    `json:"srt_file"`
-	SRTModTime  time.Time `json:"srt_mod_time"`
-	VideoFile   string    `json:"video_file"`
-	Publication string    `json:"publication"`
-	Series      int32     `json:"season"`
-	Episode     int32     `json:"episode"`
-	Dialog      []Dialog  `json:"dialog"`
+	SRTFile          string    `json:"srt_file"`
+	SRTModTime       time.Time `json:"srt_mod_time"`
+	VideoFile        string    `json:"video_file"`
+	Publication      string    `json:"publication"`
+	PublicationGroup string    `json:"publication_group"`
+	Series           int32     `json:"season"`
+	Episode          int32     `json:"episode"`
+	Dialog           []Dialog  `json:"dialog"`
 }
 
 func (e *Episode) ID() string {
@@ -42,4 +43,5 @@ func (e *Episode) ID() string {
 type Publication struct {
 	Name   string   `json:"name"`
 	Series []string `json:"series"`
+	Group  string   `json:"group"`
 }

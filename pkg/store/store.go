@@ -34,12 +34,13 @@ func (s *SRTStore) ImportEpisode(m model.Episode) error {
 	for _, v := range m.Dialog {
 		_, err := s.conn.Exec(`
 		REPLACE INTO dialog
-		    (id, publication, series, episode, pos, start_timestamp, end_timestamp, content, video_file_name) 
+		    (id, publication, publication_group, series, episode, pos, start_timestamp, end_timestamp, content, video_file_name) 
 		VALUES 
-		    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		`,
 			v.ID(m.ID()),
 			m.Publication,
+			m.PublicationGroup,
 			m.Series,
 			m.Episode,
 			v.Pos,
@@ -112,7 +113,7 @@ func (s *SRTStore) GetDialogContext(publication string, series int32, episode in
 }
 
 func (s *SRTStore) ListPublications() ([]model.Publication, error) {
-	rows, err := s.conn.Queryx(`SELECT publication, GROUP_CONCAT(DISTINCT series) FROM dialog GROUP BY publication;`)
+	rows, err := s.conn.Queryx(`SELECT publication, COALESCE(publication_group, ''), GROUP_CONCAT(DISTINCT series) FROM dialog GROUP BY publication;`)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +123,7 @@ func (s *SRTStore) ListPublications() ([]model.Publication, error) {
 	for rows.Next() {
 		row := model.Publication{}
 		var series string
-		if err := rows.Scan(&row.Name, &series); err != nil {
+		if err := rows.Scan(&row.Name, &row.Group, &series); err != nil {
 			return nil, err
 		}
 		row.Series = strings.Split(series, ",")

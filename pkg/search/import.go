@@ -61,16 +61,17 @@ func DocumentsFromModel(episode *model.Episode) []searchModel.DialogDocument {
 	docs := []searchModel.DialogDocument{}
 	for _, v := range episode.Dialog {
 		docs = append(docs, searchModel.DialogDocument{
-			ID:             fmt.Sprintf("%s-%d", episode.ID(), v.Pos),
-			Pos:            int32(v.Pos),
-			EpisodeID:      episode.ID(),
-			Publication:    episode.Publication,
-			Series:         episode.Series,
-			Episode:        episode.Episode,
-			StartTimestamp: v.StartTimestamp.Milliseconds(),
-			EndTimestamp:   v.EndTimestamp.Milliseconds(),
-			VideoFileName:  episode.VideoFile,
-			Content:        v.Content,
+			ID:               fmt.Sprintf("%s-%d", episode.ID(), v.Pos),
+			Pos:              int32(v.Pos),
+			EpisodeID:        episode.ID(),
+			Publication:      episode.Publication,
+			PublicationGroup: episode.PublicationGroup,
+			Series:           episode.Series,
+			Episode:          episode.Episode,
+			StartTimestamp:   v.StartTimestamp.Milliseconds(),
+			EndTimestamp:     v.EndTimestamp.Milliseconds(),
+			VideoFileName:    episode.VideoFile,
+			Content:          v.Content,
 		})
 	}
 	return docs

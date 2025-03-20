@@ -10,7 +10,7 @@ import (
 )
 
 type Term struct {
-	Field string
+	Field []string
 	Value Value
 	Op    CompOp
 }
@@ -78,7 +78,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 		return nil, nil
 	case tagQuotedString:
 		return []*Term{{
-			Field: "content",
+			Field: []string{"content"},
 			Value: String(strings.Trim(tok.lexeme, `"`)),
 			Op:    CompOpEq,
 		}}, nil
@@ -102,7 +102,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 			}
 		}
 		return []*Term{{
-			Field: "content",
+			Field: []string{"content"},
 			Value: String(strings.Join(words, " ")),
 			Op:    CompOpFuzzyLike,
 		}}, nil
@@ -112,7 +112,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 			return nil, err
 		}
 		return []*Term{{
-			Field: "actor",
+			Field: []string{"actor"},
 			Value: String(strings.ToLower(mentionText.lexeme)),
 			Op:    CompOpEq,
 		}}, nil
@@ -122,7 +122,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 			return nil, err
 		}
 		return []*Term{{
-			Field: "publication",
+			Field: []string{"publication", "publication_group"},
 			Value: String(strings.ToLower(mentionText.lexeme)),
 			Op:    CompOpEq,
 		}}, nil
@@ -146,7 +146,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 			return nil, err
 		}
 		return []*Term{{
-			Field: "start_timestamp",
+			Field: []string{"start_timestamp"},
 			Value: Duration(ts),
 			Op:    CompOpGe,
 		}}, nil
@@ -160,7 +160,7 @@ func (p *parser) parseInner() ([]*Term, error) {
 			return nil, fmt.Errorf("offset was not a number: %w", err)
 		}
 		return []*Term{{
-			Field: "offset",
+			Field: []string{"offset"},
 			Value: Int(intVal),
 			Op:    CompOpEq,
 		}}, nil
@@ -222,7 +222,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 		}
 		if len(parts) == 1 {
 			return []*Term{{
-				Field: "series",
+				Field: []string{"series"},
 				Value: Int(int64(series)),
 				Op:    CompOpEq,
 			}}, nil
@@ -233,11 +233,11 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 				return nil, fmt.Errorf("could not parse episode '%s' from given id %s", parts[1], lexme)
 			}
 			return []*Term{{
-				Field: "series",
+				Field: []string{"series"},
 				Value: Int(int64(series)),
 				Op:    CompOpEq,
 			}, {
-				Field: "episode",
+				Field: []string{"episode"},
 				Value: Int(int64(episode)),
 				Op:    CompOpEq,
 			}}, nil
@@ -250,7 +250,7 @@ func (p *parser) expandIDCondition(lexme string) ([]*Term, error) {
 			return nil, fmt.Errorf("could not parse episode from given id %s", lexme)
 		}
 		return []*Term{{
-			Field: "episode",
+			Field: []string{"episode"},
 			Value: Int(int64(episode)),
 			Op:    CompOpEq,
 		}}, nil

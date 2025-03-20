@@ -6,8 +6,11 @@ import (
 )
 
 func ExtractOffset(terms []Term) ([]Term, *int64) {
+	if len(terms) != 1 {
+		return terms, nil
+	}
 	offsetIdx := slices.IndexFunc(terms, func(val Term) bool {
-		return val.Field == "offset"
+		return val.Field[0] == "offset"
 	})
 	if offsetIdx == -1 {
 		return terms, nil

@@ -85,7 +85,7 @@ func (b *BlugeSearch) withSnapshot(fn func(r *bluge.Reader) error) error {
 }
 
 func (b *BlugeSearch) Get(ctx context.Context, id string) (*model.DialogDocument, error) {
-	q, _, err := bluge_query.NewBlugeQuery([]searchterms.Term{{Field: "_id", Value: searchterms.String(id), Op: searchterms.CompOpEq}})
+	q, _, err := bluge_query.NewBlugeQuery([]searchterms.Term{{Field: []string{"_id"}, Value: searchterms.String(id), Op: searchterms.CompOpEq}})
 	if err != nil {
 		return nil, fmt.Errorf("filter was invalid: %w", err)
 	}

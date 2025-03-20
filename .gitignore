@@ -3,4 +3,5 @@
 .env
 var/*.sqlite3
 var/*.sqlite3-*
+var/*.json
 var/metadata

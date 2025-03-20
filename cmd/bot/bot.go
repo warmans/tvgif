@@ -30,6 +30,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	var indexPath string
 	var dbCfg = &store.Config{}
 	var metadataPath string
+	var varPath string
 
 	cmd := &cobra.Command{
 		Use:   "bot",
@@ -62,6 +63,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 			importWorker := importer.NewIncrementalImporter(
 				mediaPath,
 				metadataPath,
+				varPath,
 				conn,
 				searcher,
 				logger,
@@ -137,6 +139,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 	flag.BoolVarEnv(cmd.Flags(), &useFilePolling, "", "use-file-polling", true, "instead of relying on filesystem events just poll for changes")
 	flag.StringVarEnv(cmd.Flags(), &indexPath, "", "index-path", "./var/index/metadata.bluge", "path to index files")
 	flag.StringVarEnv(cmd.Flags(), &metadataPath, "", "metadata-path", "./var/metadata", "path to metadata files")
+	flag.StringVarEnv(cmd.Flags(), &varPath, "", "var-path", "./var", "path to var dir")
 
 	dbCfg.RegisterFlags(cmd.Flags(), "", "dialog")
 	flag.Parse()
