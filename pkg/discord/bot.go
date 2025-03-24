@@ -48,11 +48,13 @@ const (
 	ActionOpenCustomTextModal = Action("cstm")
 	ActionOpenCaptionModal    = Action("ctm")
 	ActionOpenExtendTrimModal = Action("oem")
+	ActionOpenMergeModal      = Action("omm")
 )
 
 const (
 	ModalSetSubs              = Action("m_ss")
 	ModalActionSetExtendValue = Action("m_sev")
+	ModalActionMergeSubs      = Action("m_ms")
 	ModalSetCaption           = Action("m_sc")
 )
 
@@ -190,12 +192,14 @@ func NewBot(
 		ActionOpenCustomTextModal: bot.btnOpenCustomTextModal,
 		ActionOpenCaptionModal:    bot.btnOpenCaptionModal,
 		ActionOpenExtendTrimModal: bot.btnOpenExtendModal,
+		ActionOpenMergeModal:      bot.btnOpenMergeModal,
 		ActionUpdateState:         bot.btnUpdateState,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate){
 		ModalSetSubs:              bot.handleModalSetSubs,
 		ModalSetCaption:           bot.handleModalSetCaption,
 		ModalActionSetExtendValue: bot.handleModalSetExtendTrimValue,
+		ModalActionMergeSubs:      bot.handleModalMergeSubs,
 	}
 
 	return bot, nil
@@ -550,7 +554,7 @@ func (b *Bot) createPreview(
 	state := &PreviewState{
 		ID:               mediaID,
 		OriginalTerms:    originalTerms,
-		OriginalPosition: util.ToPtr(mediaID.PositionRange()),
+		OriginalPosition: util.ToPtr(mediaID.FormatPositionRange()),
 		Settings: Settings{
 			// defaults
 			OutputFormat: OutputWebp,
@@ -740,6 +744,23 @@ func (b *Bot) btnOpenExtendModal(s *discordgo.Session, i *discordgo.InteractionC
 	)
 }
 
+func (b *Bot) btnOpenMergeModal(s *discordgo.Session, i *discordgo.InteractionCreate, rawMediaID string) {
+	state, err := extractStateFromBody(i.Message.Content)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to get current state"))
+		return
+	}
+
+	b.openGenericValueModal(
+		s,
+		i,
+		rawMediaID,
+		ModalActionMergeSubs,
+		"End Position (e.g. 2 = add two subs)",
+		fmt.Sprintf("%d", state.ID.EndPosition-state.ID.StartPosition),
+	)
+}
+
 func (b *Bot) openGenericValueModal(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
@@ -808,7 +829,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: StateSetMediaID(prevCustomID).CustomID(),
+			CustomID: StateSetMediaID(prevCustomID.WithEndPosition(prevCustomID.StartPosition + state.ID.PositionRange())).CustomID(),
 		})
 	}
 	if len(after) > 0 {
@@ -823,7 +844,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: StateSetMediaID(state.ID.WithStartPosition(state.ID.StartPosition + 1)).CustomID(),
+			CustomID: StateSetMediaID(state.ID.WithStartPosition(nextMediaID.StartPosition).WithEndPosition(nextMediaID.StartPosition + state.ID.PositionRange())).CustomID(),
 		})
 		if dialogDuration+(after[0].EndTimestamp-after[0].StartTimestamp) <= limits.MaxGifDuration {
 			navigateButtons = append(navigateButtons, discordgo.Button{
@@ -836,17 +857,15 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 				CustomID: StateSetMediaID(state.ID.WithEndPosition(nextMediaID.StartPosition)).CustomID(),
 			})
 		}
-		if dialogDuration+(after[len(after)-1].EndTimestamp-after[len(after)-1].StartTimestamp) <= limits.MaxGifDuration {
-			navigateButtons = append(navigateButtons, discordgo.Button{
-				Label: fmt.Sprintf("Merge Next %d Subs", len(after)),
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "➕",
-				},
-				Style:    discordgo.SecondaryButton,
-				Disabled: false,
-				CustomID: StateSetMediaID(state.ID.WithEndPosition(nextMediaID.StartPosition + int64(len(after)))).CustomID(),
-			})
-		}
+		navigateButtons = append(navigateButtons, discordgo.Button{
+			Label: "Set Num Merged",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "➕",
+			},
+			Style:    discordgo.SecondaryButton,
+			Disabled: false,
+			CustomID: encodeAction(ActionOpenMergeModal, state.ID),
+		})
 		if state.ID.EndPosition > state.ID.StartPosition {
 			navigateButtons = append(navigateButtons, discordgo.Button{
 				Label: "Last Sub",
@@ -1206,6 +1225,50 @@ func (b *Bot) handleModalSetExtendTrimValue(s *discordgo.Session, i *discordgo.I
 	}
 
 	b.updatePreview(s, i, StateSetExtendOrTrim(time.Duration(floatVal*float64(time.Second))))
+}
+
+func (b *Bot) handleModalMergeSubs(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	sta, err := extractStateFromBody(i.Message.Content)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to get current state"))
+		return
+	}
+
+	strVal := i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
+	intVal, err := strconv.ParseInt(strVal, 10, 64)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("invalid extend/trim value %s: %w", strVal, err))
+		return
+	}
+	if intVal > 20 {
+		b.respondError(s, i, errors.New("cannot merge more than 20 subs"))
+		return
+	}
+
+	newMediaId := sta.ID.WithEndPosition(sta.ID.StartPosition + intVal)
+	if intVal < 0 {
+		// if the number is negative, shift the whole window back by the given amount
+		currentOffset := sta.ID.EndPosition - sta.ID.StartPosition
+		newMediaId = sta.ID.WithStartPosition(sta.ID.StartPosition + intVal).WithEndPosition(sta.ID.StartPosition + currentOffset)
+	}
+
+	duration, err := b.srtStore.GetDuration(
+		newMediaId.Publication,
+		newMediaId.Series,
+		newMediaId.Episode,
+		newMediaId.StartPosition,
+		newMediaId.EndPosition,
+	)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to get duration: %w", err))
+		return
+	}
+	if duration > limits.MaxGifDuration {
+		b.respondError(s, i, fmt.Errorf("subs exceed max gif duration (max %s, got %s)", limits.MaxGifDuration.String(), duration.String()))
+		return
+	}
+
+	b.updatePreview(s, i, StateSetMediaID(newMediaId))
 }
 
 func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionCreate, payload string) {

@@ -219,7 +219,7 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 			ID: customID,
 			// must keep this value to allow navigating between results
 			OriginalTerms:    c.OriginalTerms,
-			OriginalPosition: util.ToPtr(customID.PositionRange()),
+			OriginalPosition: util.ToPtr(customID.FormatPositionRange()),
 		}
 		*c = newState
 	case StateUpdateUpdateMediaID:

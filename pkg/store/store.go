@@ -81,6 +81,23 @@ func (s *SRTStore) GetDialogRange(publication string, series int32, episode int3
 	return dialog, nil
 }
 
+func (s *SRTStore) GetDuration(publication string, series int32, episode int32, startPos int64, endPos int64) (time.Duration, error) {
+	row := s.conn.QueryRowx(
+		`SELECT SUM(end_timestamp-start_timestamp) as duration FROM "dialog" WHERE publication=$1 AND series=$2 AND episode=$3 AND pos >= $4 AND pos <= $5`,
+		publication,
+		series,
+		episode,
+		startPos,
+		endPos,
+	)
+
+	duration := 0
+	if err := row.Scan(&duration); err != nil {
+		return 0, err
+	}
+	return time.Duration(duration), nil
+}
+
 func (s *SRTStore) GetDialogContext(publication string, series int32, episode int32, startPos int64, endPos int64, numBefore int64, numAfter int64) ([]model.Dialog, []model.Dialog, error) {
 	rows, err := s.conn.Queryx(
 		`SELECT pos, start_timestamp, end_timestamp, content, video_file_name  FROM "dialog" WHERE publication=$1 AND series=$2 AND episode=$3 AND pos >= $4 AND pos <= $5`,

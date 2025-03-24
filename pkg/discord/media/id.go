@@ -21,12 +21,12 @@ func (i *ID) String() string {
 		"%s-%s-%s",
 		i.Publication,
 		util.FormatSeriesAndEpisode(int(i.Series), int(i.Episode)),
-		i.PositionRange(),
+		i.FormatPositionRange(),
 	)
 }
 
 func (i *ID) DialogID() string {
-	return i.DialogIDWithRange(i.PositionRange())
+	return i.DialogIDWithRange(i.FormatPositionRange())
 }
 
 func (i *ID) DialogIDWithRange(customRange string) string {
@@ -37,7 +37,11 @@ func (i *ID) EpisodeID() string {
 	return fmt.Sprintf("%s-%s", i.Publication, util.FormatSeriesAndEpisode(int(i.Series), int(i.Episode)))
 }
 
-func (i *ID) PositionRange() string {
+func (i *ID) PositionRange() int64 {
+	return i.EndPosition - i.StartPosition
+}
+
+func (i *ID) FormatPositionRange() string {
 	position := fmt.Sprintf("%d", i.StartPosition)
 	if i.EndPosition > i.StartPosition {
 		position = fmt.Sprintf("%s_%d", position, i.EndPosition)
