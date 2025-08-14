@@ -1683,13 +1683,17 @@ func encodeAction(action Action, mediaID *media.ID) string {
 
 func uniqueUser(m *discordgo.Member, u *discordgo.User) string {
 	userName := "unknown"
+	id := "unknown"
 	if m != nil {
 		userName = m.DisplayName()
+		id = shortID(m.User.ID)
 	}
 	if userName == "" && u != nil {
 		userName = u.Username
+		id = shortID(u.ID)
 	}
-	return userName + " (" + shortID(m.User.ID) + ")"
+	
+	return userName + " (" + id + ")"
 }
 
 func shortID(longID string) string {
