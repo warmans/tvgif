@@ -77,9 +77,10 @@ func resolveResponseOptions(opts ...responseOption) *responseOptions {
 }
 
 type responseOptions struct {
-	username    string
-	placeholder bool
-	preview     bool
+	username            string
+	placeholder         bool
+	isPreview           bool
+	disableImagePreview bool
 }
 
 type responseOption func(options *responseOptions)
@@ -96,9 +97,15 @@ func responseWithPlaceholder() responseOption {
 	}
 }
 
-func responseWithPreview() responseOption {
+func responseWithIsPreview() responseOption {
 	return func(options *responseOptions) {
-		options.preview = true
+		options.isPreview = true
+	}
+}
+
+func responseWithImagePreviewDisabled(disabled bool) responseOption {
+	return func(options *responseOptions) {
+		options.disableImagePreview = disabled
 	}
 }
 
@@ -481,7 +488,8 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		sta,
 		responseWithUsername(username),
 		responseWithPlaceholder(),
-		responseWithPreview(),
+		responseWithIsPreview(),
+		responseWithImagePreviewDisabled(sta.Settings.DisablePreviewImage),
 	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -511,7 +519,8 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 			dialogWithContext,
 			sta,
 			responseWithUsername(username),
-			responseWithPreview(),
+			responseWithIsPreview(),
+			responseWithImagePreviewDisabled(sta.Settings.DisablePreviewImage),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -573,7 +582,8 @@ func (b *Bot) createPreview(
 		state,
 		responseWithUsername(username),
 		responseWithPlaceholder(),
-		responseWithPreview(),
+		responseWithIsPreview(),
+		responseWithImagePreviewDisabled(state.Settings.DisablePreviewImage),
 	)
 	if err != nil {
 		if errors.Is(err, errDuplicateInteraction) {
@@ -595,7 +605,8 @@ func (b *Bot) createPreview(
 			dialogWithContext,
 			state,
 			responseWithUsername(username),
-			responseWithPreview(),
+			responseWithIsPreview(),
+			responseWithImagePreviewDisabled(state.Settings.DisablePreviewImage),
 		)
 		if err != nil {
 			if errors.Is(err, errDuplicateInteraction) {
@@ -1086,6 +1097,12 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			Disabled: false,
 			CustomID: encodeAction(ActionNextResult, state.ID),
 		},
+		discordgo.Button{
+			Label:    "Toggle Preview",
+			Style:    successBtnIfTrue(state.Settings.Mode == CaptionMode),
+			Disabled: false,
+			CustomID: TogglePreview().CustomID(),
+		},
 	)
 
 	actions := []discordgo.MessageComponent{}
@@ -1302,6 +1319,14 @@ func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 			Reader:      image.Body,
 			ContentType: attachment.ContentType,
 		})
+	} else {
+		// if there was no attachment (e.g. preview disabled, render the file)
+		file, err := b.renderFile(state, dialogWithContext.Dialog)
+		if err != nil {
+			b.respondError(s, i, fmt.Errorf("failed to render file: %w", err))
+			return
+		}
+		files = append(files, file)
 	}
 	interactionResponse := &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -1347,7 +1372,7 @@ func (b *Bot) buildInteractionResponse(
 	var files []*discordgo.File
 
 	var bodyText string
-	if !opts.placeholder {
+	if !opts.placeholder && !opts.disableImagePreview {
 		gif, err := b.renderFile(state, dialogWithContext.Dialog)
 		if err != nil {
 			return nil, err
@@ -1355,7 +1380,11 @@ func (b *Bot) buildInteractionResponse(
 		files = []*discordgo.File{gif}
 		bodyText = ""
 	} else {
-		bodyText = ":timer: Rendering..."
+		if !opts.disableImagePreview {
+			bodyText = ":timer: Rendering..."
+		} else {
+			bodyText = "[Preview Disabled]"
+		}
 	}
 
 	var info string
@@ -1374,7 +1403,7 @@ func (b *Bot) buildInteractionResponse(
 					opts.username,
 					dialogWithContext,
 					state.Settings.OverrideSubs != nil,
-					opts.preview,
+					opts.isPreview,
 				),
 				mustEncodeState(state),
 				info,
@@ -1385,7 +1414,7 @@ func (b *Bot) buildInteractionResponse(
 	}, nil
 }
 
-func (b *Bot) mediaDescription(state *PreviewState, username string, dialogWithContext *DialogWithContext, edited bool, preview bool) string {
+func (b *Bot) mediaDescription(state *PreviewState, username string, dialogWithContext *DialogWithContext, edited bool, includeDialogText bool) string {
 	editLabel := ""
 	if edited {
 		editLabel = " (edited)"
@@ -1412,7 +1441,7 @@ func (b *Bot) mediaDescription(state *PreviewState, username string, dialogWithC
 	}
 
 	dialogText := ""
-	if preview {
+	if includeDialogText {
 		dialogText = dialogWithContext.String()
 	}
 
@@ -1692,7 +1721,7 @@ func uniqueUser(m *discordgo.Member, u *discordgo.User) string {
 		userName = u.Username
 		id = shortID(u.ID)
 	}
-	
+
 	return userName + " (" + id + ")"
 }
 

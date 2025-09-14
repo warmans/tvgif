@@ -21,6 +21,7 @@ const StateUpdateSetExtendOrTrim = StateUpdateType("set_extend_trim")
 const StateUpdateSetShift = StateUpdateType("set_shift")
 const StateUpdateMode = StateUpdateType("set_mode")
 const StateUpdateOutputFormat = StateUpdateType("set_output_format")
+const StateTogglePreview = StateUpdateType("toggle_preview")
 
 type Mode string
 
@@ -41,26 +42,28 @@ const (
 )
 
 type Settings struct {
-	ExtendOrTrim time.Duration  `json:"x,omitempty"`
-	Shift        time.Duration  `json:"s,omitempty"`
-	Mode         Mode           `json:"m,omitempty"`
-	Sticker      *stickerOpts   `json:"t,omitempty"`
-	Caption      string         `json:"c,omitempty"`
-	OverrideSubs []string       `json:"u,omitempty"`
-	SubsEnabled  bool           `json:"d,omitempty"`
-	OutputFormat OutputFileType `json:"o,omitempty"`
+	ExtendOrTrim        time.Duration  `json:"x,omitempty"`
+	Shift               time.Duration  `json:"s,omitempty"`
+	Mode                Mode           `json:"m,omitempty"`
+	Sticker             *stickerOpts   `json:"t,omitempty"`
+	Caption             string         `json:"c,omitempty"`
+	OverrideSubs        []string       `json:"u,omitempty"`
+	SubsEnabled         bool           `json:"d,omitempty"`
+	OutputFormat        OutputFileType `json:"o,omitempty"`
+	DisablePreviewImage bool           `json:"n,omitempty"`
 }
 
 // rawSettings is just Settings with simple types used for encoding/decoding
 type rawSettings struct {
-	ExtendOrTrim string         `json:"x,omitempty"`
-	Shift        string         `json:"s,omitempty"`
-	Mode         Mode           `json:"m,omitempty"`
-	Sticker      *stickerOpts   `json:"t,omitempty"`
-	Caption      string         `json:"c,omitempty"`
-	OverrideSubs []string       `json:"u,omitempty"`
-	SubsEnabled  bool           `json:"d,omitempty"`
-	OutputFormat OutputFileType `json:"o,omitempty"`
+	ExtendOrTrim   string         `json:"x,omitempty"`
+	Shift          string         `json:"s,omitempty"`
+	Mode           Mode           `json:"m,omitempty"`
+	Sticker        *stickerOpts   `json:"t,omitempty"`
+	Caption        string         `json:"c,omitempty"`
+	OverrideSubs   []string       `json:"u,omitempty"`
+	SubsEnabled    bool           `json:"d,omitempty"`
+	OutputFormat   OutputFileType `json:"o,omitempty"`
+	DisablePreview bool           `json:"n,omitempty"`
 }
 
 func (c *Settings) UnmarshalJSON(bytes []byte) error {
@@ -87,20 +90,22 @@ func (c *Settings) UnmarshalJSON(bytes []byte) error {
 	c.OverrideSubs = raw.OverrideSubs
 	c.SubsEnabled = raw.SubsEnabled
 	c.OutputFormat = raw.OutputFormat
+	c.DisablePreviewImage = raw.DisablePreview
 
 	return nil
 }
 
 func (c *Settings) MarshalJSON() ([]byte, error) {
 	return json.Marshal(rawSettings{
-		ExtendOrTrim: c.ExtendOrTrim.String(),
-		Shift:        c.Shift.String(),
-		Mode:         c.Mode,
-		Sticker:      c.Sticker,
-		Caption:      c.Caption,
-		OverrideSubs: c.OverrideSubs,
-		SubsEnabled:  c.SubsEnabled,
-		OutputFormat: c.OutputFormat,
+		ExtendOrTrim:   c.ExtendOrTrim.String(),
+		Shift:          c.Shift.String(),
+		Mode:           c.Mode,
+		Sticker:        c.Sticker,
+		Caption:        c.Caption,
+		OverrideSubs:   c.OverrideSubs,
+		SubsEnabled:    c.SubsEnabled,
+		OutputFormat:   c.OutputFormat,
+		DisablePreview: c.DisablePreviewImage,
 	})
 }
 
@@ -264,6 +269,8 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		} else {
 			c.Settings.OutputFormat = OutputFileType(strVal)
 		}
+	case StateTogglePreview:
+		c.Settings.DisablePreviewImage = !c.Settings.DisablePreviewImage
 	}
 
 	return nil
@@ -326,6 +333,10 @@ func StateSetShift(duration time.Duration) StateUpdate {
 
 func StateSetMode(mode Mode) StateUpdate {
 	return newStateUpdate(StateUpdateMode, mode)
+}
+
+func TogglePreview() StateUpdate {
+	return newStateUpdate(StateTogglePreview, nil)
 }
 
 func StateSetOutputFormat(format OutputFileType) StateUpdate {
