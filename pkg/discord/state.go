@@ -22,6 +22,7 @@ const StateUpdateSetShift = StateUpdateType("set_shift")
 const StateUpdateMode = StateUpdateType("set_mode")
 const StateUpdateOutputFormat = StateUpdateType("set_output_format")
 const StateTogglePreview = StateUpdateType("toggle_preview")
+const StateToggleBoomerMode = StateUpdateType("toggle_boomer_mode")
 
 type Mode string
 
@@ -51,6 +52,7 @@ type Settings struct {
 	SubsEnabled         bool           `json:"d,omitempty"`
 	OutputFormat        OutputFileType `json:"o,omitempty"`
 	DisablePreviewImage bool           `json:"n,omitempty"`
+	BoomerMode          bool           `json:"bm,omitempty"`
 }
 
 // rawSettings is just Settings with simple types used for encoding/decoding
@@ -64,6 +66,7 @@ type rawSettings struct {
 	SubsEnabled    bool           `json:"d,omitempty"`
 	OutputFormat   OutputFileType `json:"o,omitempty"`
 	DisablePreview bool           `json:"n,omitempty"`
+	BoomerMode     bool           `json:"bm,omitempty"`
 }
 
 func (c *Settings) UnmarshalJSON(bytes []byte) error {
@@ -91,6 +94,7 @@ func (c *Settings) UnmarshalJSON(bytes []byte) error {
 	c.SubsEnabled = raw.SubsEnabled
 	c.OutputFormat = raw.OutputFormat
 	c.DisablePreviewImage = raw.DisablePreview
+	c.BoomerMode = raw.BoomerMode
 
 	return nil
 }
@@ -106,6 +110,7 @@ func (c *Settings) MarshalJSON() ([]byte, error) {
 		SubsEnabled:    c.SubsEnabled,
 		OutputFormat:   c.OutputFormat,
 		DisablePreview: c.DisablePreviewImage,
+		BoomerMode:     c.BoomerMode,
 	})
 }
 
@@ -271,6 +276,8 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		}
 	case StateTogglePreview:
 		c.Settings.DisablePreviewImage = !c.Settings.DisablePreviewImage
+	case StateToggleBoomerMode:
+		c.Settings.BoomerMode = !c.Settings.BoomerMode
 	}
 
 	return nil
@@ -337,6 +344,10 @@ func StateSetMode(mode Mode) StateUpdate {
 
 func TogglePreview() StateUpdate {
 	return newStateUpdate(StateTogglePreview, nil)
+}
+
+func ToggleBoomerMode() StateUpdate {
+	return newStateUpdate(StateToggleBoomerMode, nil)
 }
 
 func StateSetOutputFormat(format OutputFileType) StateUpdate {

@@ -130,7 +130,7 @@ func NewBot(
 	logger *slog.Logger,
 	session *discordgo.Session,
 	searcher search.Searcher,
-	renderer *render.Renderer,
+	renderer render.Renderer,
 	botUsername string,
 	srtStore *store.SRTStore,
 	docsRepo *docs.Repo,
@@ -217,7 +217,7 @@ type Bot struct {
 	session         *discordgo.Session
 	searcher        search.Searcher
 	docs            *docs.Repo
-	renderer        *render.Renderer
+	renderer        render.Renderer
 	srtStore        *store.SRTStore
 	botUsername     string
 	commands        []*discordgo.ApplicationCommand
@@ -1039,6 +1039,15 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			Disabled: false,
 			CustomID: StateSetMode(CaptionMode).CustomID(),
 		},
+		discordgo.Button{
+			Label: "Boomer",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎨",
+			},
+			Style:    successBtnIfTrue(state.Settings.BoomerMode),
+			Disabled: false,
+			CustomID: ToggleBoomerMode().CustomID(),
+		},
 	}
 
 	captionButtons := []discordgo.MessageComponent{}
@@ -1509,6 +1518,7 @@ func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog) (*discordg
 		render.WithCustomText(state.Settings.OverrideSubs),
 		render.WithStartTimestamp(startTimestamp),
 		render.WithEndTimestamp(endTimestamp),
+		render.WithGifOverlays(state.Settings.BoomerMode),
 	}
 	if state.Settings.Mode == CaptionMode {
 		options = append(options,

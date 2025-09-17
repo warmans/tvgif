@@ -107,7 +107,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				logger,
 				session,
 				searcher,
-				render.NewRenderer(mediaCache, mediaPath),
+				render.NewExecRenderer(mediaCache, mediaPath, logger),
 				botUsername,
 				store.NewSRTStore(conn.Db),
 				docsRepo,

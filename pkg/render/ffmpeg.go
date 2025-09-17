@@ -59,6 +59,7 @@ type renderOpts struct {
 	disableSubs     bool
 	specialMode     SpecialMode
 	stickerModeOpts *StickerModeOpts
+	overlayGifs     bool
 }
 
 func WithOutputFileType(tp OutputFileType) Option {
@@ -128,6 +129,12 @@ func WithCaptionMode(enable bool) Option {
 	}
 }
 
+func WithGifOverlays(enable bool) Option {
+	return func(opts *renderOpts) {
+		opts.overlayGifs = enable
+	}
+}
+
 type Option func(opts *renderOpts)
 
 type drawTextOpts struct {
@@ -148,16 +155,16 @@ func withSimpsonsFont(enable bool) drawTextOpt {
 	}
 }
 
-func NewRenderer(cache *mediacache.Cache, mediaPath string) *Renderer {
-	return &Renderer{mediaCache: cache, mediaPath: mediaPath}
+func NewRenderer(cache *mediacache.Cache, mediaPath string) *FfmpegRenderer {
+	return &FfmpegRenderer{mediaCache: cache, mediaPath: mediaPath}
 }
 
-type Renderer struct {
+type FfmpegRenderer struct {
 	mediaCache *mediacache.Cache
 	mediaPath  string
 }
 
-func (r *Renderer) RenderFile(
+func (r *FfmpegRenderer) RenderFile(
 	videoFileName string,
 	customID *media.ID,
 	dialog []model2.Dialog,
@@ -187,6 +194,7 @@ func (r *Renderer) RenderFile(
 						"map_metadata": "-1",
 						"format":       "webm",
 						"filter_complex": joinFilters(
+							"0:v",
 							onlyIf(
 								!opts.disableSubs,
 								createDrawtextFilter(
@@ -223,6 +231,7 @@ func (r *Renderer) RenderFile(
 					ffmpeg_go.KwArgs{
 						"format": format,
 						"filter_complex": joinFilters(
+							"0:v",
 							onlyIf(
 								!opts.disableSubs,
 								createDrawtextFilter(
@@ -350,17 +359,17 @@ func createCaptionScaleFilter(opts *renderOpts) string {
 	return "scale=421:238:force_original_aspect_ratio=decrease,pad=596:336:(ow-iw)/2:(oh-ih)/2+30,setsar=1"
 }
 
-func joinFilters(filters ...string) string {
-	out := ""
+func joinFilters(startAt string, filters ...string) string {
+	joined := ""
 	filters = dropEmptyFilters(filters)
 	for k, v := range filters {
 		connector := ""
 		if k < len(filters)-1 {
 			connector = fmt.Sprintf("[f%d];[f%d]", k, k)
 		}
-		out += fmt.Sprintf("%s%s", v, connector)
+		joined += fmt.Sprintf("%s%s", v, connector)
 	}
-	return fmt.Sprintf("[0:v]%s", out)
+	return fmt.Sprintf("[%s]%s", startAt, joined)
 }
 
 func dropEmptyFilters(filters []string) []string {
