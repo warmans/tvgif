@@ -65,7 +65,7 @@ func (r *ExecRenderer) RenderFile(
 			format = "webp"
 		}
 
-		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching, func(writer io.Writer) error {
+		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || opts.overlayGifs, func(writer io.Writer) error {
 			//video input
 			args := [][]string{
 				{

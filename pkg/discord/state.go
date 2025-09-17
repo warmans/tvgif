@@ -124,7 +124,7 @@ type PreviewState struct {
 func (c *PreviewState) String() string {
 	optsString := ""
 	// care: the custom JSON marshallers use a pointer type
-	if optsBytes, err := json.Marshal(&c.Settings); err == nil {
+	if optsBytes, err := json.Marshal(c.Settings); err == nil {
 		optsString = fmt.Sprintf("-%s", string(optsBytes))
 	} else {
 		fmt.Println("failed to marshal opts: ", err.Error())

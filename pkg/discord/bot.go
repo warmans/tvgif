@@ -567,6 +567,7 @@ func (b *Bot) createPreview(
 		Settings: Settings{
 			// defaults
 			OutputFormat: OutputWebp,
+			BoomerMode:   false,
 		},
 	}
 
