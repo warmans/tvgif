@@ -59,7 +59,7 @@ type renderOpts struct {
 	disableSubs     bool
 	specialMode     SpecialMode
 	stickerModeOpts *StickerModeOpts
-	overlayGifs     bool
+	overlayGifs     int
 }
 
 func WithOutputFileType(tp OutputFileType) Option {
@@ -129,9 +129,9 @@ func WithCaptionMode(enable bool) Option {
 	}
 }
 
-func WithGifOverlays(enable bool) Option {
+func WithGifOverlays(num int) Option {
 	return func(opts *renderOpts) {
-		opts.overlayGifs = enable
+		opts.overlayGifs = num
 	}
 }
 

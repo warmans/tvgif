@@ -126,3 +126,10 @@ func TrimStrings(s []string) []string {
 func CleanDialogLine(s string) string {
 	return strings.TrimSpace(strings.Join(strings.Split(s, "\n"), " "))
 }
+
+func IfElse[T comparable](cond bool, a T, b T) T {
+	if cond {
+		return a
+	}
+	return b
+}

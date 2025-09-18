@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path"
 )
 
 func NewBotCommand(logger *slog.Logger) *cobra.Command {
@@ -102,12 +103,17 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create docs repo: %w", err)
 			}
 
+			overlayCache, err := mediacache.NewOverlayCache(path.Join(mediaPath, "overlay"), logger)
+			if err != nil {
+				return fmt.Errorf("failed to create overlay cache")
+			}
+
 			logger.Info("Starting bot...")
 			bot, err := discord.NewBot(
 				logger,
 				session,
 				searcher,
-				render.NewExecRenderer(mediaCache, mediaPath, logger),
+				render.NewExecRenderer(mediaCache, mediaPath, logger, overlayCache),
 				botUsername,
 				store.NewSRTStore(conn.Db),
 				docsRepo,

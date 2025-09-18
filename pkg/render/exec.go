@@ -8,6 +8,7 @@ import (
 	"github.com/warmans/tvgif/pkg/discord/media"
 	"github.com/warmans/tvgif/pkg/mediacache"
 	model2 "github.com/warmans/tvgif/pkg/model"
+	"github.com/warmans/tvgif/pkg/util"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -27,14 +28,15 @@ type Renderer interface {
 	) (*discordgo.File, error)
 }
 
-func NewExecRenderer(cache *mediacache.Cache, mediaPath string, logger *slog.Logger) *ExecRenderer {
-	return &ExecRenderer{mediaCache: cache, mediaPath: mediaPath, logger: logger}
+func NewExecRenderer(cache *mediacache.Cache, mediaPath string, logger *slog.Logger, overlayCache *mediacache.OverlayCache) *ExecRenderer {
+	return &ExecRenderer{mediaCache: cache, mediaPath: mediaPath, logger: logger, overlayCache: overlayCache}
 }
 
 type ExecRenderer struct {
-	mediaCache *mediacache.Cache
-	mediaPath  string
-	logger     *slog.Logger
+	mediaCache   *mediacache.Cache
+	mediaPath    string
+	logger       *slog.Logger
+	overlayCache *mediacache.OverlayCache
 }
 
 func (r *ExecRenderer) RenderFile(
@@ -65,7 +67,7 @@ func (r *ExecRenderer) RenderFile(
 			format = "webp"
 		}
 
-		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || opts.overlayGifs, func(writer io.Writer) error {
+		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || opts.overlayGifs > 0, func(writer io.Writer) error {
 			//video input
 			args := [][]string{
 				{
@@ -77,20 +79,19 @@ func (r *ExecRenderer) RenderFile(
 
 			filterPrefix := ""
 			filtersStartAt := "0:v"
-			numGifs := 5
 
 			// e.g. ffmpeg -i sample.mp4 -an -stream_loop -1 -i gif/hearts-1.gif -ignore_loop 0 -i sparkles.gif -ignore_loop 0 -filter_complex "[0][1]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1[out];[out][2]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1" sample_with_gif.gif
-			if opts.overlayGifs {
+			if opts.overlayGifs > 0 {
 				filterPrefix = ""
 
-				for i, gif := range randomOverlays(numGifs) {
+				for i, gif := range r.overlayCache.Random(opts.overlayGifs) {
 
 					randomX := rand.Float64()
 					randomY := rand.Float64()
 
 					filterPrefix += fmt.Sprintf(
 						"[%s][%d]overlay=x=(W*%0.2f):y=(H*%0.2f):shortest=1:[o%d];",
-						ifElse(i == 0, "0", fmt.Sprintf("o%d", i-1)),
+						util.IfElse(i == 0, "0", fmt.Sprintf("o%d", i-1)),
 						i+1,
 						randomX,
 						randomY,
@@ -104,7 +105,7 @@ func (r *ExecRenderer) RenderFile(
 					})
 				}
 
-				filtersStartAt = fmt.Sprintf("o%d", numGifs-1)
+				filtersStartAt = fmt.Sprintf("o%d", opts.overlayGifs-1)
 
 			}
 
@@ -168,41 +169,4 @@ func flattenArgs(args [][]string) []string {
 		out = append(out, a...)
 	}
 	return out
-}
-
-func randomOverlays(num int) []string {
-	gifs := []string{
-		"behappy.gif",
-		"coffee-2.gif",
-		"goodmorning.gif",
-		"kot.gif",
-		"stars-glitter.gif",
-		"bitcoin-crypto.gif",
-		"da-dan.gif",
-		"minions-minion.gif",
-		"transparent-despair.gif",
-		"cat-cat-meme.gif",
-		"glitter-graphics.gif",
-		"hearts-1.gif",
-		"sparkles.gif",
-		"transparent-hearts.gif",
-		"coffee-1.gif",
-		"good-morning.gif",
-		"heine-sparkle.gif",
-		"spinning-skull.gif",
-	}
-
-	random := []string{}
-	for i := 0; i < num; i++ {
-		random = append(random, gifs[rand.IntN(len(gifs)-1)])
-	}
-
-	return random
-}
-
-func ifElse[T comparable](cond bool, a T, b T) T {
-	if cond {
-		return a
-	}
-	return b
 }

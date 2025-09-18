@@ -22,7 +22,7 @@ const StateUpdateSetShift = StateUpdateType("set_shift")
 const StateUpdateMode = StateUpdateType("set_mode")
 const StateUpdateOutputFormat = StateUpdateType("set_output_format")
 const StateTogglePreview = StateUpdateType("toggle_preview")
-const StateToggleBoomerMode = StateUpdateType("toggle_boomer_mode")
+const StateSetBoomerModeNumGifs = StateUpdateType("set_boomer_mode_num_gifs")
 
 type Mode string
 
@@ -31,6 +31,7 @@ const (
 	StickerMode Mode = "sticker"
 	CaptionMode Mode = "caption"
 	VideoMode   Mode = "video"
+	BoomerMode  Mode = "boomer"
 )
 
 type OutputFileType string
@@ -52,7 +53,7 @@ type Settings struct {
 	SubsEnabled         bool           `json:"d,omitempty"`
 	OutputFormat        OutputFileType `json:"o,omitempty"`
 	DisablePreviewImage bool           `json:"n,omitempty"`
-	BoomerMode          bool           `json:"bm,omitempty"`
+	BoomerModeNumGifs   int            `json:"bm,omitempty"`
 }
 
 // rawSettings is just Settings with simple types used for encoding/decoding
@@ -66,7 +67,7 @@ type rawSettings struct {
 	SubsEnabled    bool           `json:"d,omitempty"`
 	OutputFormat   OutputFileType `json:"o,omitempty"`
 	DisablePreview bool           `json:"n,omitempty"`
-	BoomerMode     bool           `json:"bm,omitempty"`
+	BoomerMode     int            `json:"bm,omitempty"`
 }
 
 func (c *Settings) UnmarshalJSON(bytes []byte) error {
@@ -94,7 +95,7 @@ func (c *Settings) UnmarshalJSON(bytes []byte) error {
 	c.SubsEnabled = raw.SubsEnabled
 	c.OutputFormat = raw.OutputFormat
 	c.DisablePreviewImage = raw.DisablePreview
-	c.BoomerMode = raw.BoomerMode
+	c.BoomerModeNumGifs = raw.BoomerMode
 
 	return nil
 }
@@ -110,7 +111,7 @@ func (c *Settings) MarshalJSON() ([]byte, error) {
 		SubsEnabled:    c.SubsEnabled,
 		OutputFormat:   c.OutputFormat,
 		DisablePreview: c.DisablePreviewImage,
-		BoomerMode:     c.BoomerMode,
+		BoomerMode:     c.BoomerModeNumGifs,
 	})
 }
 
@@ -264,20 +265,26 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		c.Settings.Shift = time.Duration(floatVal)
 	case StateUpdateMode:
 		if strVal, ok := upd.Value.(string); !ok {
-			return fmt.Errorf("%s was not expected type (wanted Mode got %T)", upd.Type, upd.Value)
+			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		} else {
 			c.Settings.Mode = Mode(strVal)
 		}
 	case StateUpdateOutputFormat:
 		if strVal, ok := upd.Value.(string); !ok {
-			return fmt.Errorf("%s was not expected type (wanted Mode got %T)", upd.Type, upd.Value)
+			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		} else {
 			c.Settings.OutputFormat = OutputFileType(strVal)
 		}
 	case StateTogglePreview:
 		c.Settings.DisablePreviewImage = !c.Settings.DisablePreviewImage
-	case StateToggleBoomerMode:
-		c.Settings.BoomerMode = !c.Settings.BoomerMode
+	case StateSetBoomerModeNumGifs:
+		if intVal, ok := upd.Value.(float64); !ok {
+			c.Settings.BoomerModeNumGifs = 0
+			return fmt.Errorf("%s was not expected type (wanted float64 got %T)", upd.Type, upd.Value)
+		} else {
+			c.Settings.BoomerModeNumGifs = int(intVal)
+		}
+
 	}
 
 	return nil
@@ -346,8 +353,8 @@ func TogglePreview() StateUpdate {
 	return newStateUpdate(StateTogglePreview, nil)
 }
 
-func ToggleBoomerMode() StateUpdate {
-	return newStateUpdate(StateToggleBoomerMode, nil)
+func SetBoomerModeNumGifs(num int) StateUpdate {
+	return newStateUpdate(StateSetBoomerModeNumGifs, num)
 }
 
 func StateSetOutputFormat(format OutputFileType) StateUpdate {
