@@ -56,8 +56,8 @@ func NewFixNameCommand() *cobra.Command {
 					if fixedName == strName {
 						return fmt.Errorf("rename was a noop")
 					}
-					fmt.Fprintf(os.Stdout, "%s\n", fixedName)
-					return nil
+					_, err = fmt.Fprintf(os.Stdout, "%s\n", fixedName)
+					return err
 				}
 			}
 			return fmt.Errorf("no regex matched: %s", strName)
