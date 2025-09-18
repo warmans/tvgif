@@ -1072,16 +1072,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 		lessValue := util.IfElse(state.Settings.BoomerModeNumGifs == 1, 1, state.Settings.BoomerModeNumGifs-1)
 		moreValue := util.IfElse(state.Settings.BoomerModeNumGifs < 20, state.Settings.BoomerModeNumGifs+1, 20)
 		captionButtons = append(captionButtons, discordgo.Button{
-			Label: "One Gif",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "1️⃣",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: SetBoomerModeNumGifs(1).CustomID(),
-		})
-		captionButtons = append(captionButtons, discordgo.Button{
-			Label: fmt.Sprintf("Less Gifs (%d)", lessValue),
+			Label: fmt.Sprintf("Remove Gif (%d)", lessValue),
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "➖",
 			},
@@ -1090,7 +1081,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			CustomID: SetBoomerModeNumGifs(lessValue).CustomID(),
 		})
 		captionButtons = append(captionButtons, discordgo.Button{
-			Label: fmt.Sprintf("More Gifs (%d)", moreValue),
+			Label: fmt.Sprintf("Add Gif (%d)", moreValue),
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "➕",
 			},
@@ -1098,15 +1089,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			Disabled: false,
 			CustomID: SetBoomerModeNumGifs(moreValue).CustomID(),
 		})
-		captionButtons = append(captionButtons, discordgo.Button{
-			Label: "10 Gifs",
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🔟",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: SetBoomerModeNumGifs(10).CustomID(),
-		})
+
 	}
 
 	postActions := []discordgo.MessageComponent{discordgo.Button{
