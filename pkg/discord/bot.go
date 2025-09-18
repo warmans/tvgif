@@ -564,11 +564,7 @@ func (b *Bot) createPreview(
 		ID:               mediaID,
 		OriginalTerms:    originalTerms,
 		OriginalPosition: util.ToPtr(mediaID.FormatPositionRange()),
-		Settings: Settings{
-			// defaults
-			OutputFormat:      OutputWebp,
-			BoomerModeNumGifs: 5,
-		},
+		Settings:         defaultSetting(),
 	}
 
 	dialogWithContext, err := b.getDialogWithContext(state.ID)

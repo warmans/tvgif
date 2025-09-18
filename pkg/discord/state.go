@@ -43,6 +43,13 @@ const (
 	OutputWebp    = OutputFileType("webp")
 )
 
+func defaultSetting() Settings {
+	return Settings{
+		BoomerModeNumGifs: 5,
+		OutputFormat:      OutputWebp,
+	}
+}
+
 type Settings struct {
 	ExtendOrTrim        time.Duration  `json:"x,omitempty"`
 	Shift               time.Duration  `json:"s,omitempty"`
@@ -231,6 +238,7 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 			// must keep this value to allow navigating between results
 			OriginalTerms:    c.OriginalTerms,
 			OriginalPosition: util.ToPtr(customID.FormatPositionRange()),
+			Settings:         defaultSetting(),
 		}
 		*c = newState
 	case StateUpdateUpdateMediaID:
