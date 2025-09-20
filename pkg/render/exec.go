@@ -239,7 +239,7 @@ func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache, lo
 		}
 
 		if overlayCache.Exists(parts[1]) {
-			out = append(out, overlay{name: parts[1], x: int(x), y: int(y), scale: scale})
+			out = append(out, overlay{name: parts[1], x: int(x), y: int(y), scale: min(scale, 5)})
 		} else {
 			logger.Error("image does not exist", slog.String("line", line))
 		}

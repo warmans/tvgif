@@ -1102,7 +1102,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 		if state.Settings.BoomerModeOpts.Layout == "" {
 			if state.Settings.BoomerModeOpts.NumGifs > 0 {
 				captionButtons = append(captionButtons, discordgo.Button{
-					Label: fmt.Sprintf("Remove Gif (%d)", lessValue),
+					Label: fmt.Sprintf("Remove Random (%d)", lessValue),
 					Emoji: &discordgo.ComponentEmoji{
 						Name: "➖",
 					},
@@ -1112,7 +1112,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 				})
 			}
 			captionButtons = append(captionButtons, discordgo.Button{
-				Label: fmt.Sprintf("Add Gif (%d)", moreValue),
+				Label: fmt.Sprintf("Add Random (%d)", moreValue),
 				Emoji: &discordgo.ComponentEmoji{
 					Name: "➕",
 				},
@@ -1122,7 +1122,7 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			})
 		}
 		captionButtons = append(captionButtons, discordgo.Button{
-			Label: "Place Gifs",
+			Label: "Configure Layout",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "🔧",
 			},
