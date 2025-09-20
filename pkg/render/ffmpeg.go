@@ -59,7 +59,8 @@ type renderOpts struct {
 	disableSubs     bool
 	specialMode     SpecialMode
 	stickerModeOpts *StickerModeOpts
-	overlayGifs     int
+	overlayConfig   overlayConfig
+	showGrid        bool
 }
 
 func WithOutputFileType(tp OutputFileType) Option {
@@ -129,9 +130,21 @@ func WithCaptionMode(enable bool) Option {
 	}
 }
 
-func WithGifOverlays(num int) Option {
+func WithRandomGifOverlays(num int) Option {
 	return func(opts *renderOpts) {
-		opts.overlayGifs = num
+		opts.overlayConfig.numRandomOverlays = num
+	}
+}
+
+func WithOverlayLayout(layout string) Option {
+	return func(opts *renderOpts) {
+		opts.overlayConfig.layoutConfig = layout
+	}
+}
+
+func WithGrid(enable bool) Option {
+	return func(opts *renderOpts) {
+		opts.showGrid = enable
 	}
 }
 
@@ -357,6 +370,10 @@ func createCaptionScaleFilter(opts *renderOpts) string {
 		return ""
 	}
 	return "scale=421:238:force_original_aspect_ratio=decrease,pad=596:336:(ow-iw)/2:(oh-ih)/2+30,setsar=1"
+}
+
+func createGridFilter(xCells, yCells int) string {
+	return fmt.Sprintf("drawgrid=w=iw/%d:h=ih/%d:t=2:c=red@0.5", xCells, yCells)
 }
 
 func joinFilters(startAt string, filters ...string) string {

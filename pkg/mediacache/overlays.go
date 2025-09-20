@@ -35,3 +35,20 @@ func (o *OverlayCache) Random(num int) []string {
 	}
 	return random
 }
+
+func (o *OverlayCache) All() []string {
+	all := []string{}
+	for _, val := range o.overlays {
+		all = append(all, val)
+	}
+	return all
+}
+
+func (o *OverlayCache) Exists(name string) bool {
+	for _, val := range o.overlays {
+		if name == val {
+			return true
+		}
+	}
+	return false
+}

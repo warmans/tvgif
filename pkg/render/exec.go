@@ -15,9 +15,13 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const overlayGridSizeX = 7
+const overlayGridSizeY = 5
 
 type Renderer interface {
 	RenderFile(
@@ -67,7 +71,8 @@ func (r *ExecRenderer) RenderFile(
 			format = "webp"
 		}
 
-		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || opts.overlayGifs > 0, func(writer io.Writer) error {
+		resolvedOverlays := opts.overlayConfig.resolveOverlays(r.overlayCache)
+		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || len(resolvedOverlays) > 0, func(writer io.Writer) error {
 			//video input
 			args := [][]string{
 				{
@@ -81,32 +86,36 @@ func (r *ExecRenderer) RenderFile(
 			filtersStartAt := "0:v"
 
 			// e.g. ffmpeg -i sample.mp4 -an -stream_loop -1 -i gif/hearts-1.gif -ignore_loop 0 -i sparkles.gif -ignore_loop 0 -filter_complex "[0][1]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1[out];[out][2]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1" sample_with_gif.gif
-			if opts.overlayGifs > 0 {
+			if len(resolvedOverlays) > 0 {
 				filterPrefix = ""
 
-				for i, gif := range r.overlayCache.Random(opts.overlayGifs) {
+				for i, overlayConf := range resolvedOverlays {
 
-					randomX := rand.Float64()
-					randomY := rand.Float64()
-
+					// This should align the center of the gif with the center of the chosen grid square
+					// 1. get the top left of a grid square
+					// 2. add half the width/height of a grid squareso the image is placed in the middle
+					// 3. offset the overlay position by half its size so the middle of the overlay aligns with the middle of the grid square.
 					filterPrefix += fmt.Sprintf(
-						"[%s][%d]overlay=x=(W*%0.2f):y=(H*%0.2f):shortest=1:[o%d];",
+						"[%s][%d]overlay=x=((((W/%d)*%d)+((W/%d)/2))-w/2):y=((((H/%d)*%d)+((H/%d)/2))-h/2):shortest=1:[o%d];",
 						util.IfElse(i == 0, "0", fmt.Sprintf("o%d", i-1)),
 						i+1,
-						randomX,
-						randomY,
+						overlayGridSizeX,
+						overlayConf.x,
+						overlayGridSizeX,
+						overlayGridSizeY,
+						overlayConf.y,
+						overlayGridSizeY,
 						i,
 					)
 
 					args = append(args, []string{
 						//"-stream_loop", "-1",
 						"-ignore_loop", "0",
-						"-i", path.Join(r.mediaPath, "overlay", gif),
+						"-i", path.Join(r.mediaPath, "overlay", overlayConf.name),
 					})
 				}
 
-				filtersStartAt = fmt.Sprintf("o%d", opts.overlayGifs-1)
-
+				filtersStartAt = fmt.Sprintf("o%d", len(resolvedOverlays)-1)
 			}
 
 			// output
@@ -132,6 +141,7 @@ func (r *ExecRenderer) RenderFile(
 						createStickerCropFilter(opts),
 						createStickerResizeFilter(opts),
 						createCaptionScaleFilter(opts),
+						onlyIf(opts.showGrid, createGridFilter(overlayGridSizeX, overlayGridSizeY)),
 						createDrawtextCaptionFilter(opts.caption),
 					)),
 				"pipe:",
@@ -169,4 +179,58 @@ func flattenArgs(args [][]string) []string {
 		out = append(out, a...)
 	}
 	return out
+}
+
+type overlayConfig struct {
+	numRandomOverlays int
+	layoutConfig      string
+}
+
+func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache) []overlay {
+	if o.layoutConfig == "" {
+		out := []overlay{}
+		for _, name := range overlayCache.Random(o.numRandomOverlays) {
+			out = append(out, overlay{name: name, x: rand.IntN(5), y: rand.IntN(3)})
+		}
+		return out
+	}
+
+	out := []overlay{}
+	for _, line := range strings.Split(o.layoutConfig, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(strings.TrimSpace(strings.TrimPrefix(line, "#")), " ", 2)
+		if len(parts) != 2 {
+			return out
+		}
+
+		xy := strings.Split(parts[0], "x")
+		if len(xy) != 2 {
+			return out
+		}
+
+		x, err := strconv.ParseInt(xy[0], 10, 8)
+		if err != nil {
+			return out
+		}
+
+		y, err := strconv.ParseInt(xy[1], 10, 8)
+		if err != nil {
+			return out
+		}
+
+		if overlayCache.Exists(parts[1]) {
+			out = append(out, overlay{name: parts[1], x: min(int(x), overlayGridSizeX), y: min(int(y), overlayGridSizeY)})
+		}
+	}
+
+	return out
+}
+
+type overlay struct {
+	name string
+	x, y int
 }

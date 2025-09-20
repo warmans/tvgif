@@ -23,6 +23,7 @@ const StateUpdateMode = StateUpdateType("set_mode")
 const StateUpdateOutputFormat = StateUpdateType("set_output_format")
 const StateTogglePreview = StateUpdateType("toggle_preview")
 const StateSetBoomerModeNumGifs = StateUpdateType("set_boomer_mode_num_gifs")
+const StateSetBoomerModeLayout = StateUpdateType("set_boomer_mode_layout")
 
 type Mode string
 
@@ -45,8 +46,8 @@ const (
 
 func defaultSetting() Settings {
 	return Settings{
-		BoomerModeNumGifs: 5,
-		OutputFormat:      OutputWebp,
+		OutputFormat:   OutputWebp,
+		BoomerModeOpts: BoomerModeOpts{NumGifs: 0},
 	}
 }
 
@@ -60,7 +61,7 @@ type Settings struct {
 	SubsEnabled         bool           `json:"d,omitempty"`
 	OutputFormat        OutputFileType `json:"o,omitempty"`
 	DisablePreviewImage bool           `json:"n,omitempty"`
-	BoomerModeNumGifs   int            `json:"bm,omitempty"`
+	BoomerModeOpts      BoomerModeOpts `json:"bc,omitempty"`
 }
 
 // rawSettings is just Settings with simple types used for encoding/decoding
@@ -74,7 +75,7 @@ type rawSettings struct {
 	SubsEnabled    bool           `json:"d,omitempty"`
 	OutputFormat   OutputFileType `json:"o,omitempty"`
 	DisablePreview bool           `json:"n,omitempty"`
-	BoomerMode     int            `json:"bm,omitempty"`
+	BoomerModeOpts BoomerModeOpts `json:"bc,omitempty"`
 }
 
 func (c *Settings) UnmarshalJSON(bytes []byte) error {
@@ -102,7 +103,7 @@ func (c *Settings) UnmarshalJSON(bytes []byte) error {
 	c.SubsEnabled = raw.SubsEnabled
 	c.OutputFormat = raw.OutputFormat
 	c.DisablePreviewImage = raw.DisablePreview
-	c.BoomerModeNumGifs = raw.BoomerMode
+	c.BoomerModeOpts = raw.BoomerModeOpts
 
 	return nil
 }
@@ -118,7 +119,7 @@ func (c *Settings) MarshalJSON() ([]byte, error) {
 		SubsEnabled:    c.SubsEnabled,
 		OutputFormat:   c.OutputFormat,
 		DisablePreview: c.DisablePreviewImage,
-		BoomerMode:     c.BoomerModeNumGifs,
+		BoomerModeOpts: c.BoomerModeOpts,
 	})
 }
 
@@ -287,12 +288,18 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		c.Settings.DisablePreviewImage = !c.Settings.DisablePreviewImage
 	case StateSetBoomerModeNumGifs:
 		if intVal, ok := upd.Value.(float64); !ok {
-			c.Settings.BoomerModeNumGifs = 0
+			c.Settings.BoomerModeOpts.NumGifs = 0
 			return fmt.Errorf("%s was not expected type (wanted float64 got %T)", upd.Type, upd.Value)
 		} else {
-			c.Settings.BoomerModeNumGifs = int(intVal)
+			c.Settings.BoomerModeOpts.NumGifs = int(intVal)
 		}
-
+	case StateSetBoomerModeLayout:
+		if strVal, ok := upd.Value.(string); !ok {
+			c.Settings.BoomerModeOpts.NumGifs = 0
+			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
+		} else {
+			c.Settings.BoomerModeOpts.Layout = strVal
+		}
 	}
 
 	return nil
@@ -365,6 +372,10 @@ func SetBoomerModeNumGifs(num int) StateUpdate {
 	return newStateUpdate(StateSetBoomerModeNumGifs, num)
 }
 
+func SetBoomerModeLayout(layout string) StateUpdate {
+	return newStateUpdate(StateSetBoomerModeLayout, layout)
+}
+
 func StateSetOutputFormat(format OutputFileType) StateUpdate {
 	return newStateUpdate(StateUpdateOutputFormat, format)
 }
@@ -383,4 +394,9 @@ func decodeUpdateStateAction(encoded string) (StateUpdate, error) {
 		return StateUpdate{}, err
 	}
 	return *upd, err
+}
+
+type BoomerModeOpts struct {
+	NumGifs int    `json:"n,omitempty"`
+	Layout  string `json:"l,omitempty"`
 }

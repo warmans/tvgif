@@ -117,6 +117,7 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				botUsername,
 				store.NewSRTStore(conn.Db),
 				docsRepo,
+				overlayCache,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to create bot: %w", err)

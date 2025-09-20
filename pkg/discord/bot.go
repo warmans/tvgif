@@ -9,6 +9,7 @@ import (
 	"github.com/warmans/tvgif/pkg/discord/media"
 	"github.com/warmans/tvgif/pkg/docs"
 	"github.com/warmans/tvgif/pkg/limits"
+	"github.com/warmans/tvgif/pkg/mediacache"
 	model2 "github.com/warmans/tvgif/pkg/model"
 	"github.com/warmans/tvgif/pkg/render"
 	"github.com/warmans/tvgif/pkg/search"
@@ -45,17 +46,19 @@ const (
 )
 
 const (
-	ActionOpenCustomTextModal = Action("cstm")
-	ActionOpenCaptionModal    = Action("ctm")
-	ActionOpenExtendTrimModal = Action("oem")
-	ActionOpenMergeModal      = Action("omm")
+	ActionOpenCustomTextModal      = Action("cstm")
+	ActionOpenCaptionModal         = Action("ctm")
+	ActionOpenExtendTrimModal      = Action("oem")
+	ActionOpenMergeModal           = Action("omm")
+	ActionOpenAdvancedOverlayModal = Action("aom")
 )
 
 const (
-	ModalSetSubs              = Action("m_ss")
-	ModalActionSetExtendValue = Action("m_sev")
-	ModalActionMergeSubs      = Action("m_ms")
-	ModalSetCaption           = Action("m_sc")
+	ModalSetSubs                = Action("m_ss")
+	ModalActionSetExtendValue   = Action("m_sev")
+	ModalActionMergeSubs        = Action("m_ms")
+	ModalSetCaption             = Action("m_sc")
+	ModalSetBoomerOverlayLayout = Action("m_bml")
 )
 
 var postedByUser = regexp.MustCompile(`.+ posted by \x60([^\x60]+)\x60`)
@@ -134,6 +137,7 @@ func NewBot(
 	botUsername string,
 	srtStore *store.SRTStore,
 	docsRepo *docs.Repo,
+	overlayCache *mediacache.OverlayCache,
 ) (*Bot, error) {
 
 	docsTopics := []*discordgo.ApplicationCommandOptionChoice{
@@ -144,13 +148,14 @@ func NewBot(
 	}
 
 	bot := &Bot{
-		logger:      logger,
-		session:     session,
-		searcher:    searcher,
-		srtStore:    srtStore,
-		botUsername: botUsername,
-		docs:        docsRepo,
-		renderer:    renderer,
+		logger:       logger,
+		session:      session,
+		searcher:     searcher,
+		srtStore:     srtStore,
+		botUsername:  botUsername,
+		docs:         docsRepo,
+		renderer:     renderer,
+		overlayCache: overlayCache,
 		commands: []*discordgo.ApplicationCommand{
 			{
 				Name:        string(CommandSearch),
@@ -193,20 +198,22 @@ func NewBot(
 		string(CommandDelete): bot.deletePost,
 	}
 	bot.buttonHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate, payload string){
-		ActionConfirmPost:         bot.btnPostFromPreview,
-		ActionNextResult:          bot.btnNextResult,
-		ActionPrevResult:          bot.btnPreviewResult,
-		ActionOpenCustomTextModal: bot.btnOpenCustomTextModal,
-		ActionOpenCaptionModal:    bot.btnOpenCaptionModal,
-		ActionOpenExtendTrimModal: bot.btnOpenExtendModal,
-		ActionOpenMergeModal:      bot.btnOpenMergeModal,
-		ActionUpdateState:         bot.btnUpdateState,
+		ActionConfirmPost:              bot.btnPostFromPreview,
+		ActionNextResult:               bot.btnNextResult,
+		ActionPrevResult:               bot.btnPreviewResult,
+		ActionOpenCustomTextModal:      bot.btnOpenCustomTextModal,
+		ActionOpenCaptionModal:         bot.btnOpenCaptionModal,
+		ActionOpenExtendTrimModal:      bot.btnOpenExtendModal,
+		ActionOpenMergeModal:           bot.btnOpenMergeModal,
+		ActionOpenAdvancedOverlayModal: bot.btnOpenAdvancedOverlayModal,
+		ActionUpdateState:              bot.btnUpdateState,
 	}
 	bot.modalHandlers = map[Action]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		ModalSetSubs:              bot.handleModalSetSubs,
-		ModalSetCaption:           bot.handleModalSetCaption,
-		ModalActionSetExtendValue: bot.handleModalSetExtendTrimValue,
-		ModalActionMergeSubs:      bot.handleModalMergeSubs,
+		ModalSetSubs:                bot.handleModalSetSubs,
+		ModalSetCaption:             bot.handleModalSetCaption,
+		ModalActionSetExtendValue:   bot.handleModalSetExtendTrimValue,
+		ModalActionMergeSubs:        bot.handleModalMergeSubs,
+		ModalSetBoomerOverlayLayout: bot.handleModalBoomerModeLayout,
 	}
 
 	return bot, nil
@@ -219,6 +226,7 @@ type Bot struct {
 	docs            *docs.Repo
 	renderer        render.Renderer
 	srtStore        *store.SRTStore
+	overlayCache    *mediacache.OverlayCache
 	botUsername     string
 	commands        []*discordgo.ApplicationCommand
 	commandHandlers map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
@@ -483,7 +491,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 
-	interactionResponse, err := b.buildInteractionResponse(
+	interactionResponse, err := b.buildInteractionResponseForPreview(
 		dialogWithContext,
 		sta,
 		responseWithUsername(username),
@@ -515,7 +523,7 @@ func (b *Bot) updatePreview(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(
+		interactionResponse, err = b.buildInteractionResponseForPreview(
 			dialogWithContext,
 			sta,
 			responseWithUsername(username),
@@ -574,7 +582,7 @@ func (b *Bot) createPreview(
 	}
 
 	// send a placeholder
-	interactionResponse, err := b.buildInteractionResponse(
+	interactionResponse, err := b.buildInteractionResponseForPreview(
 		dialogWithContext,
 		state,
 		responseWithUsername(username),
@@ -598,7 +606,7 @@ func (b *Bot) createPreview(
 
 	// update with the gif
 	go func() {
-		interactionResponse, err = b.buildInteractionResponse(
+		interactionResponse, err = b.buildInteractionResponseForPreview(
 			dialogWithContext,
 			state,
 			responseWithUsername(username),
@@ -749,6 +757,7 @@ func (b *Bot) btnOpenExtendModal(s *discordgo.Session, i *discordgo.InteractionC
 		ModalActionSetExtendValue,
 		"Extend/Trim (Seconds e.g. 1.0/-1.0)",
 		fmt.Sprintf("%0.2f", float64(state.Settings.ExtendOrTrim)/float64(time.Second)),
+		discordgo.TextInputShort,
 	)
 }
 
@@ -766,6 +775,29 @@ func (b *Bot) btnOpenMergeModal(s *discordgo.Session, i *discordgo.InteractionCr
 		ModalActionMergeSubs,
 		"End Position (e.g. 2 = add two subs)",
 		fmt.Sprintf("%d", state.ID.EndPosition-state.ID.StartPosition),
+		discordgo.TextInputShort,
+	)
+}
+
+func (b *Bot) btnOpenAdvancedOverlayModal(s *discordgo.Session, i *discordgo.InteractionCreate, rawMediaID string) {
+	state, err := extractStateFromBody(i.Message.Content)
+	if err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to get current state"))
+		return
+	}
+
+	b.openGenericValueModal(
+		s,
+		i,
+		rawMediaID,
+		ModalSetBoomerOverlayLayout,
+		"Layout",
+		util.IfElse(
+			state.Settings.BoomerModeOpts.Layout != "",
+			state.Settings.BoomerModeOpts.Layout,
+			b.getBoomerModeInitialLayout(),
+		),
+		discordgo.TextInputParagraph,
 	)
 }
 
@@ -776,6 +808,7 @@ func (b *Bot) openGenericValueModal(
 	action Action,
 	label string,
 	initialValue string,
+	style discordgo.TextInputStyle,
 ) {
 	mediaID, err := media.ParseID(rawMediaID)
 	if err != nil {
@@ -785,12 +818,11 @@ func (b *Bot) openGenericValueModal(
 	fields := []discordgo.MessageComponent{discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.TextInput{
-				CustomID:  "value",
-				Label:     label,
-				Style:     discordgo.TextInputShort,
-				Required:  true,
-				MaxLength: 128,
-				Value:     initialValue,
+				CustomID: "value",
+				Label:    label,
+				Style:    style,
+				Required: true,
+				Value:    initialValue,
 			},
 		},
 	}}
@@ -1065,27 +1097,39 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 
 	boomerButtons := []discordgo.MessageComponent{}
 	if state.Settings.Mode == BoomerMode {
-		lessValue := util.IfElse(state.Settings.BoomerModeNumGifs == 1, 1, state.Settings.BoomerModeNumGifs-1)
-		moreValue := util.IfElse(state.Settings.BoomerModeNumGifs < 20, state.Settings.BoomerModeNumGifs+1, 20)
+		lessValue := util.IfElse(state.Settings.BoomerModeOpts.NumGifs == 0, 0, state.Settings.BoomerModeOpts.NumGifs-1)
+		moreValue := util.IfElse(state.Settings.BoomerModeOpts.NumGifs < 20, state.Settings.BoomerModeOpts.NumGifs+1, 20)
+		if state.Settings.BoomerModeOpts.Layout == "" {
+			if state.Settings.BoomerModeOpts.NumGifs > 0 {
+				captionButtons = append(captionButtons, discordgo.Button{
+					Label: fmt.Sprintf("Remove Gif (%d)", lessValue),
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "➖",
+					},
+					Style:    discordgo.SecondaryButton,
+					Disabled: false,
+					CustomID: SetBoomerModeNumGifs(lessValue).CustomID(),
+				})
+			}
+			captionButtons = append(captionButtons, discordgo.Button{
+				Label: fmt.Sprintf("Add Gif (%d)", moreValue),
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "➕",
+				},
+				Style:    discordgo.SecondaryButton,
+				Disabled: false,
+				CustomID: SetBoomerModeNumGifs(moreValue).CustomID(),
+			})
+		}
 		captionButtons = append(captionButtons, discordgo.Button{
-			Label: fmt.Sprintf("Remove Gif (%d)", lessValue),
+			Label: "Place Gifs",
 			Emoji: &discordgo.ComponentEmoji{
-				Name: "➖",
+				Name: "🔧",
 			},
 			Style:    discordgo.SecondaryButton,
 			Disabled: false,
-			CustomID: SetBoomerModeNumGifs(lessValue).CustomID(),
+			CustomID: encodeAction(ActionOpenAdvancedOverlayModal, state.ID),
 		})
-		captionButtons = append(captionButtons, discordgo.Button{
-			Label: fmt.Sprintf("Add Gif (%d)", moreValue),
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "➕",
-			},
-			Style:    discordgo.SecondaryButton,
-			Disabled: false,
-			CustomID: SetBoomerModeNumGifs(moreValue).CustomID(),
-		})
-
 	}
 
 	postActions := []discordgo.MessageComponent{discordgo.Button{
@@ -1322,7 +1366,26 @@ func (b *Bot) handleModalMergeSubs(s *discordgo.Session, i *discordgo.Interactio
 	b.updatePreview(s, i, StateSetMediaID(newMediaId))
 }
 
+func (b *Bot) handleModalBoomerModeLayout(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	b.updatePreview(
+		s,
+		i,
+		SetBoomerModeLayout(
+			i.Interaction.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value,
+		),
+	)
+}
+
 func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionCreate, payload string) {
+
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{},
+	}); err != nil {
+		b.respondError(s, i, fmt.Errorf("failed to begin interaction: %w", err))
+		return
+	}
+
 	state, err := extractStateFromBody(i.Message.Content)
 	if err != nil {
 		b.respondError(s, i, fmt.Errorf("failed to get preview state"))
@@ -1339,7 +1402,7 @@ func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 	var files []*discordgo.File
-	if len(i.Message.Attachments) > 0 {
+	if len(i.Message.Attachments) > 0 && state.Settings.Mode != BoomerMode {
 		attachment := i.Message.Attachments[0]
 		image, err := http.Get(attachment.URL)
 		if err != nil {
@@ -1354,36 +1417,33 @@ func (b *Bot) btnPostFromPreview(s *discordgo.Session, i *discordgo.InteractionC
 			ContentType: attachment.ContentType,
 		})
 	} else {
-		// if there was no attachment (e.g. preview disabled, render the file)
-		file, err := b.renderFile(state, dialogWithContext.Dialog)
+		// if there was no attachment (e.g. preview disabled, render the file), or the gif needs to be re-rendered
+		// without boomer layout grid
+		file, err := b.renderFile(state, dialogWithContext.Dialog, false)
 		if err != nil {
 			b.respondError(s, i, fmt.Errorf("failed to render file: %w", err))
 			return
 		}
 		files = append(files, file)
 	}
-	interactionResponse := &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: b.mediaDescription(
-				state,
-				uniqueUser(i.Member, i.User),
-				dialogWithContext,
-				state.Settings.OverrideSubs != nil,
-				false,
-			),
-			Files:       files,
-			Attachments: util.ToPtr([]*discordgo.MessageAttachment{}),
-		},
-	}
 
-	if err := s.InteractionRespond(i.Interaction, interactionResponse); err != nil {
+	if _, err := s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+		Content: b.mediaDescription(
+			state,
+			uniqueUser(i.Member, i.User),
+			dialogWithContext,
+			state.Settings.OverrideSubs != nil,
+			false,
+		),
+		Files:       files,
+		Attachments: []*discordgo.MessageAttachment{},
+	}); err != nil {
 		b.respondError(s, i, err)
 		return
 	}
 }
 
-func (b *Bot) buildInteractionResponse(
+func (b *Bot) buildInteractionResponseForPreview(
 	dialogWithContext *DialogWithContext,
 	state *PreviewState,
 	options ...responseOption,
@@ -1407,7 +1467,7 @@ func (b *Bot) buildInteractionResponse(
 
 	var bodyText string
 	if !opts.placeholder && !opts.disableImagePreview {
-		gif, err := b.renderFile(state, dialogWithContext.Dialog)
+		gif, err := b.renderFile(state, dialogWithContext.Dialog, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1508,7 +1568,7 @@ func (b *Bot) respondError(s *discordgo.Session, i *discordgo.InteractionCreate,
 	}
 }
 
-func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog) (*discordgo.File, error) {
+func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog, preview bool) (*discordgo.File, error) {
 
 	disableCaching := state.Settings.ExtendOrTrim != 0 || state.Settings.Shift != 0 || state.Settings.OverrideSubs != nil || (state.Settings.Mode != NormalMode)
 	startTimestamp := dialog[0].StartTimestamp
@@ -1535,6 +1595,7 @@ func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog) (*discordg
 		slog.Duration("to", endTimestamp),
 		slog.String("output", string(state.Settings.OutputFormat)),
 		slog.Bool("custom_text", state.Settings.OverrideSubs != nil),
+		slog.Bool("preview", preview),
 	)
 	logger.Debug("Rendering file...")
 
@@ -1543,7 +1604,9 @@ func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog) (*discordg
 		render.WithCustomText(state.Settings.OverrideSubs),
 		render.WithStartTimestamp(startTimestamp),
 		render.WithEndTimestamp(endTimestamp),
-		render.WithGifOverlays(util.IfElse(state.Settings.Mode == BoomerMode, state.Settings.BoomerModeNumGifs, 0)),
+		render.WithRandomGifOverlays(util.IfElse(state.Settings.Mode == BoomerMode, state.Settings.BoomerModeOpts.NumGifs, 0)),
+		render.WithOverlayLayout(util.IfElse(state.Settings.Mode == BoomerMode && state.Settings.BoomerModeOpts.Layout != "", state.Settings.BoomerModeOpts.Layout, "")),
+		render.WithGrid(state.Settings.Mode == BoomerMode && preview),
 	}
 	if state.Settings.Mode == CaptionMode {
 		options = append(options,
@@ -1739,6 +1802,16 @@ func (b *Bot) getDialogWithContext(mediaID *media.ID) (*DialogWithContext, error
 		Dialog: dialog,
 		After:  after,
 	}, nil
+}
+
+func (b *Bot) getBoomerModeInitialLayout() string {
+	out := []string{
+		"# Remove hash to enable, set coordinates between 0-6x0-4",
+	}
+	for _, overlayName := range b.overlayCache.All() {
+		out = append(out, fmt.Sprintf("# 0x0 %s", overlayName))
+	}
+	return strings.Join(out, "\n")
 }
 
 func encodeAction(action Action, mediaID *media.ID) string {
