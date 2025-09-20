@@ -71,7 +71,7 @@ func (r *ExecRenderer) RenderFile(
 			format = "webp"
 		}
 
-		resolvedOverlays := opts.overlayConfig.resolveOverlays(r.overlayCache)
+		resolvedOverlays := opts.overlayConfig.resolveOverlays(r.overlayCache, r.logger)
 		_, err := r.mediaCache.Get(createFileName(customID, extension), buff, opts.disableCaching || len(resolvedOverlays) > 0, func(writer io.Writer) error {
 			//video input
 			args := [][]string{
@@ -87,7 +87,10 @@ func (r *ExecRenderer) RenderFile(
 
 			// e.g. ffmpeg -i sample.mp4 -an -stream_loop -1 -i gif/hearts-1.gif -ignore_loop 0 -i sparkles.gif -ignore_loop 0 -filter_complex "[0][1]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1[out];[out][2]overlay=x=W/2-w/2:y=H/2-h/2:shortest=1" sample_with_gif.gif
 			if len(resolvedOverlays) > 0 {
-				filterPrefix = ""
+				// resize all inputs
+				for i, overlayConf := range resolvedOverlays {
+					filterPrefix += fmt.Sprintf("[%d]scale=w=iw*%0.2f:h=ih*%0.2f[i%d];", i+1, overlayConf.scale, overlayConf.scale, i+1)
+				}
 
 				for i, overlayConf := range resolvedOverlays {
 
@@ -96,7 +99,7 @@ func (r *ExecRenderer) RenderFile(
 					// 2. add half the width/height of a grid squareso the image is placed in the middle
 					// 3. offset the overlay position by half its size so the middle of the overlay aligns with the middle of the grid square.
 					filterPrefix += fmt.Sprintf(
-						"[%s][%d]overlay=x=((((W/%d)*%d)+((W/%d)/2))-w/2):y=((((H/%d)*%d)+((H/%d)/2))-h/2):shortest=1:[o%d];",
+						"[%s][i%d]overlay=x=((((W/%d)*%d)+((W/%d)/2))-w/2):y=((((H/%d)*%d)+((H/%d)/2))-h/2):shortest=1:[o%d];",
 						util.IfElse(i == 0, "0", fmt.Sprintf("o%d", i-1)),
 						i+1,
 						overlayGridSizeX,
@@ -186,11 +189,11 @@ type overlayConfig struct {
 	layoutConfig      string
 }
 
-func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache) []overlay {
+func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache, logger *slog.Logger) []overlay {
 	if o.layoutConfig == "" {
 		out := []overlay{}
 		for _, name := range overlayCache.Random(o.numRandomOverlays) {
-			out = append(out, overlay{name: name, x: rand.IntN(5), y: rand.IntN(3)})
+			out = append(out, overlay{name: name, x: rand.IntN(5), y: rand.IntN(3), scale: 1})
 		}
 		return out
 	}
@@ -202,28 +205,43 @@ func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache) []
 			continue
 		}
 
-		parts := strings.SplitN(strings.TrimSpace(strings.TrimPrefix(line, "#")), " ", 2)
-		if len(parts) != 2 {
+		parts := strings.SplitN(strings.TrimSpace(strings.TrimPrefix(line, "#")), " ", 3)
+		if len(parts) < 2 {
+			logger.Error("line did not have enough elements", slog.String("line", line))
 			return out
 		}
 
 		xy := strings.Split(parts[0], "x")
 		if len(xy) != 2 {
+			logger.Error("XY did not have enough elements", slog.String("line", line), slog.String("xy", parts[0]))
 			return out
 		}
 
 		x, err := strconv.ParseInt(xy[0], 10, 8)
 		if err != nil {
+			logger.Error("failed to parse X", slog.String("line", line), slog.String("x", xy[0]))
 			return out
 		}
 
 		y, err := strconv.ParseInt(xy[1], 10, 8)
 		if err != nil {
+			logger.Error("failed to parse Y", slog.String("line", line), slog.String("y", xy[1]))
 			return out
 		}
 
+		scale := float64(1)
+		if len(parts) > 2 {
+			scale, err = strconv.ParseFloat(parts[2], 64)
+			if err != nil {
+				logger.Error("failed to parse scale", slog.String("line", line), slog.String("err", err.Error()))
+				return out
+			}
+		}
+
 		if overlayCache.Exists(parts[1]) {
-			out = append(out, overlay{name: parts[1], x: min(int(x), overlayGridSizeX), y: min(int(y), overlayGridSizeY)})
+			out = append(out, overlay{name: parts[1], x: int(x), y: int(y), scale: scale})
+		} else {
+			logger.Error("image does not exist", slog.String("line", line))
 		}
 	}
 
@@ -231,6 +249,7 @@ func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache) []
 }
 
 type overlay struct {
-	name string
-	x, y int
+	name  string
+	x, y  int
+	scale float64
 }
