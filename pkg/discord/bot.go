@@ -1097,32 +1097,8 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 
 	boomerButtons := []discordgo.MessageComponent{}
 	if state.Settings.Mode == BoomerMode {
-		lessValue := util.IfElse(state.Settings.BoomerModeOpts.NumGifs == 0, 0, state.Settings.BoomerModeOpts.NumGifs-1)
-		moreValue := util.IfElse(state.Settings.BoomerModeOpts.NumGifs < 20, state.Settings.BoomerModeOpts.NumGifs+1, 20)
-		if state.Settings.BoomerModeOpts.Layout == "" {
-			if state.Settings.BoomerModeOpts.NumGifs > 0 {
-				captionButtons = append(captionButtons, discordgo.Button{
-					Label: fmt.Sprintf("Remove Random (%d)", lessValue),
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "➖",
-					},
-					Style:    discordgo.SecondaryButton,
-					Disabled: false,
-					CustomID: SetBoomerModeNumGifs(lessValue).CustomID(),
-				})
-			}
-			captionButtons = append(captionButtons, discordgo.Button{
-				Label: fmt.Sprintf("Add Random (%d)", moreValue),
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "➕",
-				},
-				Style:    discordgo.SecondaryButton,
-				Disabled: false,
-				CustomID: SetBoomerModeNumGifs(moreValue).CustomID(),
-			})
-		}
 		captionButtons = append(captionButtons, discordgo.Button{
-			Label: "Configure Layout",
+			Label: "Configure Boomer Overlays",
 			Emoji: &discordgo.ComponentEmoji{
 				Name: "🔧",
 			},
@@ -1604,9 +1580,12 @@ func (b *Bot) renderFile(state *PreviewState, dialog []model2.Dialog, preview bo
 		render.WithCustomText(state.Settings.OverrideSubs),
 		render.WithStartTimestamp(startTimestamp),
 		render.WithEndTimestamp(endTimestamp),
-		render.WithRandomGifOverlays(util.IfElse(state.Settings.Mode == BoomerMode, state.Settings.BoomerModeOpts.NumGifs, 0)),
-		render.WithOverlayLayout(util.IfElse(state.Settings.Mode == BoomerMode && state.Settings.BoomerModeOpts.Layout != "", state.Settings.BoomerModeOpts.Layout, "")),
-		render.WithGrid(state.Settings.Mode == BoomerMode && preview),
+	}
+	if state.Settings.Mode == BoomerMode {
+		options = append(options,
+			render.WithOverlayLayout(util.IfElse(state.Settings.BoomerModeOpts.Layout != "", state.Settings.BoomerModeOpts.Layout, "")),
+			render.WithGrid(preview),
+		)
 	}
 	if state.Settings.Mode == CaptionMode {
 		options = append(options,

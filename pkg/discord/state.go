@@ -22,7 +22,6 @@ const StateUpdateSetShift = StateUpdateType("set_shift")
 const StateUpdateMode = StateUpdateType("set_mode")
 const StateUpdateOutputFormat = StateUpdateType("set_output_format")
 const StateTogglePreview = StateUpdateType("toggle_preview")
-const StateSetBoomerModeNumGifs = StateUpdateType("set_boomer_mode_num_gifs")
 const StateSetBoomerModeLayout = StateUpdateType("set_boomer_mode_layout")
 
 type Mode string
@@ -46,8 +45,7 @@ const (
 
 func defaultSetting() Settings {
 	return Settings{
-		OutputFormat:   OutputWebp,
-		BoomerModeOpts: BoomerModeOpts{NumGifs: 0},
+		OutputFormat: OutputWebp,
 	}
 }
 
@@ -286,16 +284,8 @@ func (c *PreviewState) ApplyUpdate(upd StateUpdate) error {
 		}
 	case StateTogglePreview:
 		c.Settings.DisablePreviewImage = !c.Settings.DisablePreviewImage
-	case StateSetBoomerModeNumGifs:
-		if intVal, ok := upd.Value.(float64); !ok {
-			c.Settings.BoomerModeOpts.NumGifs = 0
-			return fmt.Errorf("%s was not expected type (wanted float64 got %T)", upd.Type, upd.Value)
-		} else {
-			c.Settings.BoomerModeOpts.NumGifs = int(intVal)
-		}
 	case StateSetBoomerModeLayout:
 		if strVal, ok := upd.Value.(string); !ok {
-			c.Settings.BoomerModeOpts.NumGifs = 0
 			return fmt.Errorf("%s was not expected type (wanted string got %T)", upd.Type, upd.Value)
 		} else {
 			c.Settings.BoomerModeOpts.Layout = strVal
@@ -368,10 +358,6 @@ func TogglePreview() StateUpdate {
 	return newStateUpdate(StateTogglePreview, nil)
 }
 
-func SetBoomerModeNumGifs(num int) StateUpdate {
-	return newStateUpdate(StateSetBoomerModeNumGifs, num)
-}
-
 func SetBoomerModeLayout(layout string) StateUpdate {
 	return newStateUpdate(StateSetBoomerModeLayout, layout)
 }
@@ -397,6 +383,5 @@ func decodeUpdateStateAction(encoded string) (StateUpdate, error) {
 }
 
 type BoomerModeOpts struct {
-	NumGifs int    `json:"n,omitempty"`
-	Layout  string `json:"l,omitempty"`
+	Layout string `json:"l,omitempty"`
 }
