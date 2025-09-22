@@ -130,12 +130,6 @@ func WithCaptionMode(enable bool) Option {
 	}
 }
 
-func WithRandomGifOverlays(num int) Option {
-	return func(opts *renderOpts) {
-		opts.overlayConfig.numRandomOverlays = num
-	}
-}
-
 func WithOverlayLayout(layout string) Option {
 	return func(opts *renderOpts) {
 		opts.overlayConfig.layoutConfig = layout

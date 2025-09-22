@@ -1785,7 +1785,7 @@ func (b *Bot) getDialogWithContext(mediaID *media.ID) (*DialogWithContext, error
 
 func (b *Bot) getBoomerModeInitialLayout() string {
 	out := []string{
-		"# Remove hash to enable gif. You may also duplicate lines. Cell references start at 0 e.g. 0x3 foo.gif 0.5",
+		"# Remove hash to enable gif.\n# You may also duplicate lines.\n#Cell references are decimals and start at 0.\n# Append an 'f' to to flip the gif. e.g. 0x3.5 foo.gif 0.5 f",
 	}
 	for _, overlayName := range b.overlayCache.All() {
 		out = append(out, fmt.Sprintf("# 0x0 %s 1", overlayName))
