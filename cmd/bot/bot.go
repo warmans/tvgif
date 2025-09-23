@@ -13,6 +13,7 @@ import (
 	"github.com/warmans/tvgif/pkg/render"
 	"github.com/warmans/tvgif/pkg/search"
 	"github.com/warmans/tvgif/pkg/store"
+	"github.com/warmans/tvgif/pkg/web"
 	"log"
 	"log/slog"
 	"os"
@@ -123,9 +124,19 @@ func NewBotCommand(logger *slog.Logger) *cobra.Command {
 				return fmt.Errorf("failed to create bot: %w", err)
 			}
 
+			server := web.NewServer(":8080", path.Join(mediaPath, "overlay"), overlayCache)
+
 			if err = bot.Start(); err != nil {
 				return fmt.Errorf("failed to start bot: %w", err)
 			}
+
+			go func() {
+				logger.Info("Starting web server", slog.String("addr", ":8080"))
+				if err := server.Start(); err != nil {
+					logger.Error("web server failed", slog.String("err", err.Error()))
+				}
+			}()
+
 			stop := make(chan os.Signal, 1)
 			signal.Notify(stop, os.Interrupt)
 			<-stop
