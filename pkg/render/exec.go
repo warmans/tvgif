@@ -198,7 +198,8 @@ func (o overlayConfig) resolveOverlays(overlayCache *mediacache.OverlayCache, lo
 	out := []overlay{}
 	for _, line := range strings.Split(o.layoutConfig, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") {
+
+		if strings.HasPrefix(line, "#") || line == "" {
 			continue
 		}
 
