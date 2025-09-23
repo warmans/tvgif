@@ -1106,6 +1106,15 @@ func (b *Bot) createButtons(dialog []model2.Dialog, state *PreviewState) ([]disc
 			Disabled: false,
 			CustomID: encodeAction(ActionOpenAdvancedOverlayModal, state.ID),
 		})
+		captionButtons = append(captionButtons, discordgo.Button{
+			Label: "View Overlays",
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🖼️",
+			},
+			Style:    discordgo.LinkButton,
+			Disabled: false,
+			URL:      "http://tvgif.scrimpton.com:8080/overlays/index.html",
+		})
 	}
 
 	postActions := []discordgo.MessageComponent{discordgo.Button{
@@ -1785,9 +1794,24 @@ func (b *Bot) getDialogWithContext(mediaID *media.ID) (*DialogWithContext, error
 
 func (b *Bot) getBoomerModeInitialLayout() string {
 	out := []string{
-		"# Remove hash to enable gif.\n# You may also duplicate lines.\n#Cell references are decimals and start at 0.\n# Append an 'f' to to flip the gif. e.g. 0x3.5 foo.gif 0.5 f",
+		`# Remove hash to enable gif.
+# The elements of an overlay are as follows:
+#
+#   [X cell]x[Y cell] [overlay name] [scale] [optional args]
+#
+# Example: 
+#    0x3.5 foo.gif 0.5 f
+#
+# You may also duplicate lines.
+# Cell numbers are decimals and start at 0 (so you can do e.g. 3.5).
+# Currently the only optional arg is "f" to flip the image horizontally.
+#
+# View available overlays here: http://tvgif.scrimpton.com:8080/overlays/index.html
+#
+# Here are 10 random overlays:
+`,
 	}
-	for _, overlayName := range b.overlayCache.All() {
+	for _, overlayName := range b.overlayCache.Random(10) {
 		out = append(out, fmt.Sprintf("# 0x0 %s 1", overlayName))
 	}
 	return strings.Join(out, "\n")
